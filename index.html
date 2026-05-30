@@ -2,25 +2,23 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>地图事件查看器</title>
+  <title>Run&Bun地图编辑器</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div class="app">
   <div class="panel">
-    <h2>ROM 中文地图事件查看器</h2>
-
-    <div class="setup-entry">
-      <button id="openSetupModal" type="button">
-        <span>导入 / 渲染设置</span>
-        <small>ROM、Tileset、扫描信息</small>
-      </button>
+    <div class="panel-header">
+      <h2>Run&Bun地图编辑器</h2>
+      <div class="top-actions">
+        <button id="openSetupModal" type="button">导入</button>
+        <button id="exportRomBtn" class="secondary-btn" type="button" disabled>导出</button>
+      </div>
     </div>
 
-    <h3>地图筛选</h3>
-    <input id="mapSearch" type="text" placeholder="搜索地图名 / header offset / section id / 尺寸 / 事件数量" />
+    <h3>地图列表</h3>
+    <input id="mapSearch" type="text" placeholder="搜索地图名 / mapNum / mapGroup / 地图编码 / 区域编码" />
 
-    <h3>地图选择</h3>
     <div id="mapList" class="map-list">
       <div class="empty-tip">导入 ROM 后会自动扫描地图。</div>
     </div>
@@ -131,10 +129,7 @@
       <div class="modal-section">
         <h3>ROM 文件</h3>
         <input id="romFile" type="file" accept=".gba,.bin" />
-        <div class="export-row">
-          <button id="exportRomBtn" class="secondary-btn" type="button" disabled>导出修改后的 ROM</button>
-        </div>
-        <div class="small">修改天气下拉框后，会直接改当前地图 MapHeader +0x16 的 weather 字节；导出按钮会保存修改后的 ROM。</div>
+        <div class="small">修改天气下拉框后，会直接改当前地图 MapHeader +0x16 的 weather 字节；点击页面左上角“导出”保存修改后的 ROM。</div>
       </div>
 
       <div class="modal-section">
