@@ -3,37 +3,39 @@
 // ============================================================
 let selectedMapIndex = -1;
 
-function setActiveTab(tabName) {
-  const isEvents = tabName === "events";
-
-  document.getElementById("tabEvents").classList.toggle("active", isEvents);
-  document.getElementById("tabMapInfo").classList.toggle("active", !isEvents);
-  document.getElementById("eventTab").classList.toggle("active", isEvents);
-  document.getElementById("mapInfoTab").classList.toggle("active", !isEvents);
+function getEditorModeFromState() {
+  return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || window.RBEditorState?.mode || "terrain";
 }
 
-function buildConnectionsInfoText(header) {
-  if (!header) return "";
-  const parsed = parseMapConnections(header.connectionsPtr);
-  header.connectionsParsed = parsed;
+function ensureEventPanelIfNeeded(force = false) {
+  if (!force && getEditorModeFromState() !== "events") return false;
+  if (window.RBEditorRightPanel?.ensureEventsPanel) {
+    window.RBEditorRightPanel.ensureEventsPanel();
+    return true;
+  }
+  return !!document.getElementById("eventList");
+}
 
-  if (!parsed.list.length) {
-    return `Connections     : count=${parsed.count}, status=${parsed.status}\n`;
+function ensureMapInfoPanelIfNeeded(force = false) {
+  if (!force && getEditorModeFromState() !== "metadata") return false;
+  if (window.RBEditorRightPanel?.ensureMapInfoPanel) {
+    window.RBEditorRightPanel.ensureMapInfoPanel();
+    return true;
+  }
+  return !!document.getElementById("mapInfo");
+}
+
+function setActiveTab(tabName) {
+  if (tabName === "events") {
+    if (window.RBEditorSetMode) window.RBEditorSetMode("events");
+    else window.RBEditorRightPanel?.showEventsOnly?.();
+    return;
   }
 
-  const lines = [];
-  lines.push(`Connections     : count=${parsed.count}, headerOff=${parsed.offset !== null ? hex(parsed.offset) : "null"}, dataOff=${parsed.dataOff !== null ? hex(parsed.dataOff) : "null"}`);
-
-  for (const conn of parsed.list) {
-    const targetMap = findMapByGroupNum(conn.mapGroup, conn.mapNum);
-    const targetName = targetMap ? getMapDisplayNameWithCode(targetMap) : "未匹配地图";
-    const info = getConnectionDestinationInfo(conn, header);
-    lines.push(
-      `  #${conn.index} ${connectionDirectionName(conn.direction)} offset=${conn.connectionOffset} -> group=${conn.mapGroup}, map=${conn.mapNum} / ${targetName} / ${info?.statusText ?? "未能判断"}`
-    );
+  if (tabName === "mapInfo") {
+    if (window.RBEditorSetMode) window.RBEditorSetMode("metadata");
+    else window.RBEditorRightPanel?.showMapInfoOnly?.();
   }
-
-  return lines.join("\n") + "\n";
 }
 
 function buildMapInfoText(header) {
@@ -146,26 +148,32 @@ function resetViewerState(keepRom = false) {
 
   document.getElementById("mapSearch").value = "";
   document.getElementById("mapList").innerHTML = `<div class="empty-tip">导入 ROM 后会自动扫描地图。</div>`;
-  document.getElementById("eventList").innerHTML = "";
-  document.getElementById("eventSummary").innerHTML = `
-    <div>OBJ: 0</div>
-    <div>TRAINER: 0</div>
-    <div>WARP: 0</div>
-    <div>BG/COORD: 0</div>
-  `;
-  document.getElementById("eventDetail").textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
+
+  const eventList = document.getElementById("eventList");
+  if (eventList) eventList.innerHTML = "";
+
+  const eventSummary = document.getElementById("eventSummary");
+  if (eventSummary) {
+    eventSummary.innerHTML = `
+      <div>OBJ: 0</div>
+      <div>TRAINER: 0</div>
+      <div>WARP: 0</div>
+      <div>BG/COORD: 0</div>
+    `;
+  }
+
+  const eventDetail = document.getElementById("eventDetail");
+  if (eventDetail) eventDetail.textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
+
   const warpTools = document.getElementById("warpTools");
   if (warpTools) {
     warpTools.className = "warp-tools empty";
     warpTools.innerHTML = "";
   }
-  const connectionTools = document.getElementById("connectionTools");
-  if (connectionTools) {
-    connectionTools.className = "warp-tools empty";
-    connectionTools.innerHTML = "";
-  }
+
   clearConnectionEdgeNav();
-  document.getElementById("mapInfo").textContent = "未加载地图。";
+  const mapInfo = document.getElementById("mapInfo");
+  if (mapInfo) mapInfo.textContent = "未加载地图。";
   updateCurrentMapName(null);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -186,13 +194,6 @@ function refreshMapList() {
       h.mapGroup !== undefined ? `group=${h.mapGroup}` : "",
       h.mapNum !== undefined ? `map=${h.mapNum}` : "",
       h.mapGroup !== undefined ? `${h.mapGroup}:${h.mapNum}` : "",
-      // hex(h.offset),
-      // hex(h.ptr),
-      // `${h.layout.width}x${h.layout.height}`,
-      // `obj=${h.events.objectCount}`,
-      // `warp=${h.events.warpCount}`,
-      // `bg=${h.events.bgCount}`,
-      // `coord=${h.events.coordCount}`,
     ].join(" ").toLowerCase();
 
     return !query || text.includes(query);
@@ -212,7 +213,6 @@ function refreshMapList() {
   for (let i = 0; i < filteredHeaders.length; i++) {
     const h = filteredHeaders[i];
     const mapName = getMapDisplayNameWithSuffix(h);
-    const mapNameEn = getMapEnglishName(h);
 
     const item = document.createElement("div");
     item.className = "map-option";
@@ -239,7 +239,7 @@ function refreshMapList() {
     `当前筛选数量：${filteredHeaders.length}\n\n` +
     `说明：当前仍是简单扫描模式，但已经过滤空 map_name 和零事件候选。\n` +
     `地图名来自 gRegionMapEntries，通过 MapHeader.regionMapSectionId 解析。\n` +
-    `同一区域的多个房间可能显示同一个名称，详细信息请看右侧“地图信息”Tab。`;
+    `同一区域的多个房间可能显示同一个名称，详细信息请看右侧“地图信息”模式。`;
 }
 
 function escapeHtml(s) {
@@ -267,13 +267,22 @@ function selectMap(idx, switchToEventsTab = false) {
   }
 
   autoMatchTilesetsForCurrentMap().then(() => renderMap(header, currentEvents));
-  renderEventList(currentEvents);
 
-  document.getElementById("mapInfo").textContent = buildMapInfoText(header);
-  renderConnectionTools(header);
+  if (getEditorModeFromState() === "events" || switchToEventsTab) {
+    ensureEventPanelIfNeeded(true);
+    renderEventList(currentEvents);
+    const eventDetail = document.getElementById("eventDetail");
+    if (eventDetail) eventDetail.textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
+    renderWarpTools(null);
+  }
+
+  if (getEditorModeFromState() === "metadata") {
+    ensureMapInfoPanelIfNeeded(true);
+    const mapInfo = document.getElementById("mapInfo");
+    if (mapInfo) mapInfo.textContent = buildMapInfoText(header);
+  }
+
   renderConnectionEdgeNav(header);
-  document.getElementById("eventDetail").textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
-  renderWarpTools(null);
   updateCurrentMapName(header);
 
   if (switchToEventsTab) setActiveTab("events");
@@ -296,7 +305,6 @@ async function handleRomFile(file) {
     `大小：${hex(rom.length)} bytes\n\n` +
     `正在自动扫描 MapHeader...`;
 
-  // 让浏览器先刷新“正在扫描”的提示，避免大 ROM 扫描时界面看起来卡住。
   await new Promise(resolve => setTimeout(resolve, 0));
 
   mapHeaders = scanMapHeaders();
@@ -317,31 +325,6 @@ gMapGroups offset：${hex(GMAPGROUPS_OFFSET)}
   }
 }
 
-const setupModal = document.getElementById("setupModal");
-
-function openSetupModal() {
-  setupModal.classList.add("open");
-  setupModal.setAttribute("aria-hidden", "false");
-}
-
-function closeSetupModal() {
-  setupModal.classList.remove("open");
-  setupModal.setAttribute("aria-hidden", "true");
-}
-
-document.getElementById("openSetupModal").addEventListener("click", openSetupModal);
-document.getElementById("closeSetupModal").addEventListener("click", closeSetupModal);
-document.getElementById("doneSetupModal").addEventListener("click", closeSetupModal);
-
-setupModal.addEventListener("click", (e) => {
-  if (e.target === setupModal) closeSetupModal();
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && setupModal.classList.contains("open")) {
-    closeSetupModal();
-  }
-});
 function applyCurrentMapWeather(value) {
   if (!rom || !currentMap) return;
   const weatherValue = Number(value) & 0xFF;
@@ -355,8 +338,8 @@ function applyCurrentMapWeather(value) {
   rom[weatherOff] = weatherValue;
   currentMap.weather = weatherValue;
 
-  // 同一个 MapHeader 可能同时存在于筛选列表 / group 索引中，更新当前对象后刷新详情即可。
-  document.getElementById("mapInfo").textContent = buildMapInfoText(currentMap);
+  const mapInfo = document.getElementById("mapInfo");
+  if (mapInfo) mapInfo.textContent = buildMapInfoText(currentMap);
   document.getElementById("scanInfo").textContent =
     `已修改天气：${getMapDisplayNameWithSuffix(currentMap)}\n` +
     `weather offset: ${hex(weatherOff)}\n` +
@@ -404,17 +387,17 @@ document.getElementById("mapSearch").addEventListener("input", () => {
     currentMap = null;
     selectedEventKey = null;
     selectedMapIndex = -1;
-    renderEventSummary([]);
-    document.getElementById("eventList").innerHTML = "";
-    document.getElementById("eventDetail").textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
-    document.getElementById("mapInfo").textContent = "未加载地图。";
+    if (document.getElementById("eventSummary")) renderEventSummary([]);
+    const eventList = document.getElementById("eventList");
+    if (eventList) eventList.innerHTML = "";
+    const eventDetail = document.getElementById("eventDetail");
+    if (eventDetail) eventDetail.textContent = "点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。";
+    const mapInfo = document.getElementById("mapInfo");
+    if (mapInfo) mapInfo.textContent = "未加载地图。";
     updateCurrentMapName(null);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 });
-
-document.getElementById("tabEvents").addEventListener("click", () => setActiveTab("events"));
-document.getElementById("tabMapInfo").addEventListener("click", () => setActiveTab("mapInfo"));
 
 document.getElementById("tilesetZipFile").addEventListener("change", async (e) => {
   const file = e.target.files[0];
