@@ -7,7 +7,7 @@
   let installed = false;
 
   function mode() {
-    return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || "terrain";
+    return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || "events";
   }
 
   function panel() {
@@ -142,15 +142,26 @@
 
   function showTerrain() {
     hideCenterMetadataInfo();
+
+    const editor =
+      document.getElementById("terrainEditorPanel") ||
+      document.getElementById("finalTerrainEditorPanel");
+
+    // 当前页面没有地形编辑面板时，不要进入 terrain，回退到事件列表。
+    // 否则会把 eventList/mapInfo 等兼容节点移走，导入 ROM 时 main.js 会拿到 null。
+    if (!editor) {
+      showEvents();
+      return;
+    }
+
     const p = resetRightPanel("地图编辑");
     if (!p) return;
     p.classList.add("mode-terrain-editor");
-    const editor = takeDetached("terrainEditorPanel") || document.getElementById("terrainEditorPanel");
-    if (editor) {
-      editor.classList.add("active");
-      editor.style.display = "flex";
-      p.appendChild(editor);
-    }
+
+    editor.classList.add("active");
+    editor.style.display = "flex";
+    p.appendChild(editor);
+
     appendHiddenCompatNodes(p);
   }
 
