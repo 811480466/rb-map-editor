@@ -215,45 +215,79 @@
     if (mapOff === null || !isValidOffset(mapOff, w * h * 2)) return [];
 
     const records = new Map();
-    const eventCells = new Set((currentEvents || []).map(ev => `${ev.x},${ev.y}`));
-
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const raw = readU16(mapOff + (y * w + x) * 2);
         const blockId = raw & 0x03FF;
         const old = records.get(blockId);
-        const isCleanSample = !eventCells.has(`${x},${y}`);
-
-        if (!old) {
-          records.set(blockId, { blockId, count: 1, x, y, clean: isCleanSample });
-        } else {
-          old.count++;
-          if (!old.clean && isCleanSample) {
-            old.x = x;
-            old.y = y;
-            old.clean = true;
-          }
-        }
+        if (!old) records.set(blockId, { blockId, count: 1 });
+        else old.count++;
       }
     }
 
     return Array.from(records.values()).sort((a, b) => a.blockId - b.blockId);
   }
 
-  function drawTerrainIcon(item, iconCanvas) {
+  function fillImageDataWhite(imageData) {
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i + 0] = 255;
+      imageData.data[i + 1] = 255;
+      imageData.data[i + 2] = 255;
+      imageData.data[i + 3] = 255;
+    }
+  }
+
+  function drawTerrainIconFromTileset(blockId, iconCanvas) {
     const iconCtx = iconCanvas.getContext("2d");
     iconCtx.imageSmoothingEnabled = false;
     iconCtx.clearRect(0, 0, iconCanvas.width, iconCanvas.height);
 
-    if (!currentMap || !canvas) return;
+    if (!currentMap || typeof loadRomTilesetAsset !== "function" || typeof drawRomMetatileToImage !== "function") {
+      return false;
+    }
 
-    const cs = getCellSize();
-    const sx = item.x * cs;
-    const sy = item.y * cs;
+    const primary = loadRomTilesetAsset(currentMap.layout.primaryTilesetPtr);
+    const secondary = loadRomTilesetAsset(currentMap.layout.secondaryTilesetPtr);
+    const useSecondary = blockId >= 512;
+    const metatileAsset = useSecondary ? secondary : primary;
+    const localMetatileId = useSecondary ? blockId - 512 : blockId;
 
-    if (sx < 0 || sy < 0 || sx + cs > canvas.width || sy + cs > canvas.height) return;
+    if (!metatileAsset) return false;
 
-    iconCtx.drawImage(canvas, sx, sy, cs, cs, 0, 0, iconCanvas.width, iconCanvas.height);
+    const imageData = iconCtx.createImageData(32, 32);
+    fillImageDataWhite(imageData);
+
+    drawRomMetatileToImage(
+      imageData,
+      0,
+      0,
+      metatileAsset,
+      localMetatileId,
+      primary,
+      secondary,
+      null
+    );
+
+    iconCtx.putImageData(imageData, 0, 0);
+    return true;
+  }
+
+  function drawTerrainIconFallback(blockId, iconCanvas) {
+    const iconCtx = iconCanvas.getContext("2d");
+    iconCtx.imageSmoothingEnabled = false;
+    iconCtx.clearRect(0, 0, iconCanvas.width, iconCanvas.height);
+    iconCtx.fillStyle = "#f8fbff";
+    iconCtx.fillRect(0, 0, iconCanvas.width, iconCanvas.height);
+    iconCtx.fillStyle = "#1e3a8a";
+    iconCtx.font = "10px Arial";
+    iconCtx.textAlign = "center";
+    iconCtx.textBaseline = "middle";
+    iconCtx.fillText(hex(blockId, 3), iconCanvas.width / 2, iconCanvas.height / 2);
+  }
+
+  function drawTerrainIcon(blockId, iconCanvas) {
+    const ok = drawTerrainIconFromTileset(blockId, iconCanvas);
+    if (!ok) drawTerrainIconFallback(blockId, iconCanvas);
   }
 
   function refreshTerrainPanel() {
@@ -284,7 +318,7 @@
       const iconCanvas = document.createElement("canvas");
       iconCanvas.width = 32;
       iconCanvas.height = 32;
-      drawTerrainIcon(item, iconCanvas);
+      drawTerrainIcon(item.blockId, iconCanvas);
 
       card.appendChild(iconCanvas);
       card.onclick = () => {
