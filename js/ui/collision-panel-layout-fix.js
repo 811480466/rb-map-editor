@@ -5,6 +5,7 @@
 // - 透明度放最上面
 // - 当前高度 / 当前碰撞属性只显示，不作为输入控件
 // - 下方按“可通行 / 不可通行”一行两个方块选择
+// - 查看模式点击地图格子时，右侧显示该格子的高度 / 碰撞属性
 
 (function collisionPanelLayoutFix() {
   function injectStyle() {
@@ -62,6 +63,17 @@
         text-align: center;
       }
 
+      .collision-current-cell {
+        margin-top: 8px;
+        padding: 7px 9px;
+        border: 1px dashed #bfd3f4;
+        border-radius: 8px;
+        background: #fff;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
       .collision-choice-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -117,16 +129,30 @@
     return document.querySelector(".terrain-editor-tab-btn.active")?.dataset.terrainTab === "collision";
   }
 
-  function updateCurrentDisplay(host) {
+  function getEditorMode() {
+    return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || "terrain";
+  }
+
+  function getMouseMode() {
+    return document.querySelector('input[name="mouseMode"]:checked')?.value || "view";
+  }
+
+  function collisionText(collision) {
+    return collision === 0 ? "0 可通行" : `${collision} 不可通行`;
+  }
+
+  function updateCurrentDisplay(host, sourceText = null) {
     const elevationInput = document.getElementById("collisionElevationInput");
     const collisionInput = document.getElementById("collisionValueInput");
     const elevation = clampNumber(elevationInput?.value, 0, 15, 3);
     const collision = clampNumber(collisionInput?.value, 0, 3, 1);
 
     const elevationText = host.querySelector("#collisionCurrentElevationText");
-    const collisionText = host.querySelector("#collisionCurrentValueText");
+    const collisionValueText = host.querySelector("#collisionCurrentValueText");
+    const cellText = host.querySelector("#collisionCurrentCellText");
     if (elevationText) elevationText.textContent = `当前高度：${elevation}`;
-    if (collisionText) collisionText.textContent = `当前碰撞：${collision === 0 ? "0 可通行" : `${collision} 不可通行`}`;
+    if (collisionValueText) collisionValueText.textContent = `当前碰撞：${collisionText(collision)}`;
+    if (sourceText && cellText) cellText.textContent = sourceText;
 
     for (const btn of host.querySelectorAll(".collision-choice-btn")) {
       btn.classList.toggle(
@@ -150,7 +176,33 @@
       collisionInput.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    updateCurrentDisplay(host);
+    updateCurrentDisplay(host, `当前选择：高度 ${elevation} / 碰撞 ${collisionText(collision)}`);
+  }
+
+  function setDisplayFromMapCell(cell) {
+    const host = document.getElementById("terrainEditorCollisionHost");
+    const elevationInput = document.getElementById("collisionElevationInput");
+    const collisionInput = document.getElementById("collisionValueInput");
+    if (!host || !elevationInput || !collisionInput || !currentMap || !rom || !cell) return;
+
+    const mapOff = ptrToOffset(currentMap.layout.mapPtr);
+    if (mapOff === null) return;
+
+    const w = currentMap.layout.width;
+    const cellOff = mapOff + (cell.y * w + cell.x) * 2;
+    if (!isValidOffset(cellOff, 2)) return;
+
+    const raw = readU16(cellOff);
+    const collision = (raw >> 10) & 0x03;
+    const elevation = (raw >> 12) & 0x0F;
+
+    // 这里只同步隐藏输入和右侧显示，不触发 change，避免查看模式点击地图时误触重绘/写入。
+    elevationInput.value = String(elevation);
+    collisionInput.value = String(collision);
+    updateCurrentDisplay(
+      host,
+      `当前格子：x=${cell.x}, y=${cell.y} / raw=${hex(raw, 4)}`
+    );
   }
 
   function enhancePanel() {
@@ -180,11 +232,12 @@
     const currentCard = document.createElement("div");
     currentCard.className = "collision-current-card";
     currentCard.innerHTML = `
-      <span class="collision-current-label">当前选择</span>
+      <span class="collision-current-label">当前格子 / 当前选择</span>
       <div class="collision-current-grid">
         <div id="collisionCurrentElevationText" class="collision-current-value">当前高度：3</div>
         <div id="collisionCurrentValueText" class="collision-current-value">当前碰撞：1 不可通行</div>
       </div>
+      <div id="collisionCurrentCellText" class="collision-current-cell">查看模式点击地图格子，会显示该格子的高度和碰撞。</div>
     `;
 
     const choiceCard = document.createElement("div");
@@ -253,6 +306,18 @@
       const host = document.getElementById("terrainEditorCollisionHost");
       if (host) updateCurrentDisplay(host);
     }
+  }, true);
+
+  window.addEventListener("click", (e) => {
+    if (getEditorMode() !== "terrain") return;
+    if (!isCollisionTabVisible()) return;
+    if (getMouseMode() !== "view") return;
+    if (!e.target || e.target.id !== "mapCanvas") return;
+    if (typeof getMapCellFromMouseEvent !== "function") return;
+
+    const cell = getMapCellFromMouseEvent(e);
+    if (!cell) return;
+    setDisplayFromMapCell(cell);
   }, true);
 
   const observer = new MutationObserver(() => {
