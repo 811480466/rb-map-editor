@@ -56,6 +56,17 @@
     document.head.appendChild(style);
   }
 
+  function rerenderCurrentMap() {
+    if (typeof currentMap === "undefined" || typeof currentEvents === "undefined") return;
+    if (!currentMap || typeof renderMap !== "function") return;
+    renderMap(currentMap, currentEvents);
+  }
+
+  function setEventMarkersVisible(visible) {
+    window.__rbEditorShowEvents = !!visible;
+    rerenderCurrentMap();
+  }
+
   function removeCenterMetadataMapInfo() {
     document.getElementById("metadataMapInfoBox")?.remove();
     for (const el of document.querySelectorAll("#mapMetadataPanel .metadata-map-info")) {
@@ -155,6 +166,7 @@
   function showEventsMode() {
     setCenterMetadataVisible(false);
     hideTerrainPanel();
+    setEventMarkersVisible(true);
     const legend = document.querySelector(".legend-bar");
     if (legend) legend.style.display = "block";
     if (window.RBEditorRightPanel?.showEventsOnly) {
@@ -172,6 +184,7 @@
   }
 
   function showMetadataMode() {
+    setEventMarkersVisible(false);
     hideTerrainPanel();
     removeCenterMetadataMapInfo();
     setCenterMetadataVisible(true);
@@ -190,6 +203,7 @@
   }
 
   function showTerrainMode() {
+    setEventMarkersVisible(false);
     setCenterMetadataVisible(false);
     removeCenterMetadataMapInfo();
     const legend = document.querySelector(".legend-bar");
@@ -200,6 +214,7 @@
   }
 
   function showConnectionsMode() {
+    setEventMarkersVisible(false);
     setCenterMetadataVisible(false);
     hideTerrainPanel();
     const legend = document.querySelector(".legend-bar");
