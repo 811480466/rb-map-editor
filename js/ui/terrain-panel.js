@@ -8,6 +8,8 @@
 (function terrainPanel() {
   let originalRenderMap = null;
   let renderingTiles = false;
+  let tileLibraryKey = "";
+  let tileLibraryInitialized = false;
 
   function injectStyle() {
     if (document.getElementById("terrainPanelStyle")) return;
@@ -102,6 +104,8 @@
           </div>
         </div>`;
       rightPanel.appendChild(panel);
+      tileLibraryInitialized = false;
+      tileLibraryKey = "";
     }
 
     return panel;
@@ -109,6 +113,7 @@
 
   function setTerrainTab(tab) {
     const activeTab = tab === "collision" ? "collision" : "tiles";
+    const previousTab = window.RBEditorState?.terrainTab;
     if (window.RBEditorState) window.RBEditorState.terrainTab = activeTab;
 
     for (const btn of document.querySelectorAll(".terrain-editor-tab-btn")) {
@@ -116,8 +121,9 @@
     }
     document.getElementById("terrainEditorTilesHost")?.classList.toggle("active", activeTab === "tiles");
     document.getElementById("terrainEditorCollisionHost")?.classList.toggle("active", activeTab === "collision");
-    refreshTileLibrary();
-    rerenderMap();
+
+    if (activeTab === "tiles") refreshTileLibrary(false);
+    if (activeTab === "collision" || previousTab !== activeTab) rerenderMap();
   }
 
   function getAvailableBlocks() {
@@ -152,6 +158,16 @@
       }
     }
     return Array.from(records.values()).sort((a, b) => a.blockId - b.blockId);
+  }
+
+  function getTileLibraryKey() {
+    if (!currentMap) return "no-map";
+    return [
+      currentMap.offset,
+      currentMap.layout?.primaryTilesetPtr,
+      currentMap.layout?.secondaryTilesetPtr,
+      currentMap.layout?.mapPtr,
+    ].join(":");
   }
 
   function fillImageDataWhite(imageData) {
@@ -203,21 +219,31 @@
 
   function refreshTileSelection() {
     const selectedBlockId = window.RBEditorState?.selectedBlockId ?? Number(document.querySelector(".tile-card.active")?.dataset.blockId) ?? 0;
-    for (const btn of document.querySelectorAll(".tile-card")) {
-      btn.classList.toggle("active", Number(btn.dataset.blockId) === selectedBlockId);
-    }
+    const active = document.querySelector(".tile-card.active");
+    const next = document.querySelector(`.tile-card[data-block-id="${selectedBlockId}"]`);
+    if (active && active !== next) active.classList.remove("active");
+    if (next) next.classList.add("active");
     const current = document.getElementById("currentTileCanvas");
     if (current) drawTileIcon(selectedBlockId, current);
   }
 
-  function refreshTileLibrary() {
+  function refreshTileLibrary(force = false) {
     if (renderingTiles || getEditorMode() !== "terrain") return;
     const grid = document.getElementById("tileLibraryGrid");
     if (!grid) return;
 
+    const nextKey = getTileLibraryKey();
+    if (!force && tileLibraryInitialized && tileLibraryKey === nextKey && grid.children.length) {
+      refreshTileSelection();
+      return;
+    }
+
     renderingTiles = true;
     try {
       const blocks = getAvailableBlocks();
+      tileLibraryKey = nextKey;
+      tileLibraryInitialized = true;
+
       if (!blocks.length) {
         grid.innerHTML = `<div class="empty-tip">当前地图没有读取到可用瓦片。</div>`;
         return;
@@ -227,7 +253,7 @@
       if (!blocks.some(x => x.blockId === selectedBlockId)) selectedBlockId = blocks[0].blockId;
       if (window.RBEditorState) window.RBEditorState.selectedBlockId = selectedBlockId;
 
-      grid.innerHTML = "";
+      const fragment = document.createDocumentFragment();
       for (const item of blocks) {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -241,13 +267,10 @@
         drawTileIcon(item.blockId, icon);
 
         btn.appendChild(icon);
-        btn.onclick = () => {
-          if (window.RBEditorTerrain?.selectBlock) window.RBEditorTerrain.selectBlock(item.blockId, btn);
-          else if (window.RBEditorState) window.RBEditorState.selectedBlockId = item.blockId;
-          refreshTileSelection();
-        };
-        grid.appendChild(btn);
+        fragment.appendChild(btn);
       }
+
+      grid.replaceChildren(fragment);
       refreshTileSelection();
     } finally {
       renderingTiles = false;
@@ -307,7 +330,9 @@
     const wrapped = async function renderMapWithTerrainPanel(...args) {
       const result = await originalRenderMap.apply(this, args);
       drawCollisionOverlay();
-      setTimeout(refreshTileLibrary, 0);
+      if (!tileLibraryInitialized || tileLibraryKey !== getTileLibraryKey()) {
+        refreshTileLibrary(false);
+      }
       return result;
     };
     try { renderMap = wrapped; } catch (err) { window.renderMap = wrapped; }
@@ -347,18 +372,13 @@
     setTerrainTab(getTerrainTab());
   }
 
-  function scheduleApply() {
-    setTimeout(applyTerrainEditorState, 0);
-    setTimeout(applyTerrainEditorState, 80);
-  }
-
   function install() {
     injectStyle();
     wrapRenderMap();
 
     document.addEventListener("click", (e) => {
       if (e.target.closest(".editor-mode-option") || e.target.closest('input[name="mouseMode"]') || e.target.closest(".terrain-editor-tab-btn")) {
-        scheduleApply();
+        applyTerrainEditorState();
       }
     }, true);
 
@@ -366,11 +386,7 @@
       if (e.target.matches("#collisionOpacityInput")) rerenderMap();
     }, true);
 
-    const observer = new MutationObserver(() => setTimeout(applyTerrainEditorState, 0));
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style"] });
-
-    setTimeout(applyTerrainEditorState, 0);
-    setTimeout(applyTerrainEditorState, 250);
+    applyTerrainEditorState();
   }
 
   install();
