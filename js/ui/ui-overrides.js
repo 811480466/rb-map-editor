@@ -206,26 +206,45 @@
     }
   }
 
-  function getUniqueBlockIdsForCurrentMap() {
-    if (!currentMap || !rom) return [];
+  function getAvailableBlockIdsForCurrentMap() {
+    if (!currentMap || !rom || typeof loadRomTilesetAsset !== "function") return [];
 
-    const w = currentMap.layout.width;
-    const h = currentMap.layout.height;
-    const mapOff = ptrToOffset(currentMap.layout.mapPtr);
-    if (mapOff === null || !isValidOffset(mapOff, w * h * 2)) return [];
+    const primary = loadRomTilesetAsset(currentMap.layout.primaryTilesetPtr);
+    const secondary = loadRomTilesetAsset(currentMap.layout.secondaryTilesetPtr);
+    const blocks = [];
 
-    const records = new Map();
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const raw = readU16(mapOff + (y * w + x) * 2);
-        const blockId = raw & 0x03FF;
-        const old = records.get(blockId);
-        if (!old) records.set(blockId, { blockId, count: 1 });
-        else old.count++;
+    if (primary?.metatiles?.length) {
+      const primaryCount = Math.min(512, Math.floor(primary.metatiles.length / 16));
+      for (let i = 0; i < primaryCount; i++) {
+        blocks.push({ blockId: i, source: "primary" });
       }
     }
 
-    return Array.from(records.values()).sort((a, b) => a.blockId - b.blockId);
+    if (secondary?.metatiles?.length) {
+      const secondaryCount = Math.min(512, Math.floor(secondary.metatiles.length / 16));
+      for (let i = 0; i < secondaryCount; i++) {
+        blocks.push({ blockId: 512 + i, source: "secondary" });
+      }
+    }
+
+    // 如果 tileset 暂时读不到，退回当前地图已使用的 blockId，避免右侧完全空白。
+    if (!blocks.length) {
+      const w = currentMap.layout.width;
+      const h = currentMap.layout.height;
+      const mapOff = ptrToOffset(currentMap.layout.mapPtr);
+      if (mapOff === null || !isValidOffset(mapOff, w * h * 2)) return [];
+      const records = new Map();
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const raw = readU16(mapOff + (y * w + x) * 2);
+          const blockId = raw & 0x03FF;
+          records.set(blockId, { blockId, source: blockId >= 512 ? "secondary" : "primary" });
+        }
+      }
+      return Array.from(records.values()).sort((a, b) => a.blockId - b.blockId);
+    }
+
+    return blocks;
   }
 
   function fillImageDataWhite(imageData) {
@@ -297,23 +316,23 @@
     if (!list) return;
 
     list.innerHTML = "";
-    const uniqueBlocks = getUniqueBlockIdsForCurrentMap();
+    const blocks = getAvailableBlockIdsForCurrentMap();
 
-    if (!uniqueBlocks.length) {
-      list.innerHTML = `<div class="empty-tip">当前地图没有读取到 blockId。请确认已经导入 ROM 并选中地图。</div>`;
+    if (!blocks.length) {
+      list.innerHTML = `<div class="empty-tip">当前地图没有读取到可用地形。请确认已经导入 ROM 并选中地图。</div>`;
       return;
     }
 
-    if (selectedPaintBlockId === null || !uniqueBlocks.some(x => x.blockId === selectedPaintBlockId)) {
-      selectedPaintBlockId = uniqueBlocks[0].blockId;
+    if (selectedPaintBlockId === null || !blocks.some(x => x.blockId === selectedPaintBlockId)) {
+      selectedPaintBlockId = blocks[0].blockId;
     }
 
-    for (const item of uniqueBlocks) {
+    for (const item of blocks) {
       const card = document.createElement("button");
       card.type = "button";
       card.className = "terrain-card";
       card.dataset.blockId = String(item.blockId);
-      card.title = `blockId=${hex(item.blockId, 4)}`;
+      card.title = `${item.source} blockId=${hex(item.blockId, 4)}`;
 
       const iconCanvas = document.createElement("canvas");
       iconCanvas.width = 32;
