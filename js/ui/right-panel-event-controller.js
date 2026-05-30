@@ -41,9 +41,20 @@
     }
   }
 
+  function hideCenterMetadataMapInfo() {
+    const box = document.getElementById("metadataMapInfoBox");
+    if (box) box.style.display = "none";
+  }
+
+  function showCenterMetadataMapInfoIfNeeded() {
+    const box = document.getElementById("metadataMapInfoBox");
+    if (box) box.style.display = "";
+  }
+
   function showEvents() {
     const panel = rightPanel();
     if (!panel) return;
+    showCenterMetadataMapInfoIfNeeded();
     panel.classList.remove("mode-terrain-editor", "mode-terrain-view", "mode-terrain-paint", "final-terrain-editor");
     const t = title();
     if (t) t.textContent = "地图事件";
@@ -59,6 +70,7 @@
   function showConnector() {
     const panel = rightPanel();
     if (!panel) return;
+    showCenterMetadataMapInfoIfNeeded();
     panel.classList.remove("mode-terrain-editor", "mode-terrain-view", "mode-terrain-paint", "final-terrain-editor");
     const t = title();
     if (t) t.textContent = "地图连接器";
@@ -72,14 +84,34 @@
   }
 
   function showMetadata() {
+    const panel = rightPanel();
+    if (!panel) return;
+
+    panel.classList.remove("mode-terrain-editor", "mode-terrain-view", "mode-terrain-paint", "final-terrain-editor");
     const t = title();
-    if (t) t.textContent = "地图元数据";
+    if (t) t.textContent = "地图信息";
+
     hideAllDynamicPanels();
+    hideBaseRightPanelParts();
+    hideCenterMetadataMapInfo();
+
+    const mapInfoTab = document.getElementById("mapInfoTab");
+    const mapInfo = document.getElementById("mapInfo");
+    if (mapInfoTab) {
+      mapInfoTab.classList.add("active");
+      mapInfoTab.style.display = "block";
+      mapInfoTab.style.overflow = "auto";
+    }
+    if (mapInfo) {
+      mapInfo.style.maxHeight = "none";
+      mapInfo.style.height = "auto";
+    }
   }
 
   function showTerrain() {
     const panel = rightPanel();
     if (!panel) return;
+    showCenterMetadataMapInfoIfNeeded();
     panel.classList.add("mode-terrain-editor");
     panel.classList.remove("mode-terrain-view", "mode-terrain-paint", "final-terrain-editor");
     const t = title();
