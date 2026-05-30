@@ -7,8 +7,6 @@
   let selectedPaintBlockId = null;
   let originalRightPanelState = null;
 
-  const originalRefreshMapList = window.refreshMapList || refreshMapList;
-
   window.refreshMapList = function refreshMapListOverride() {
     const list = document.getElementById("mapList");
     const query = document.getElementById("mapSearch").value.trim().toLowerCase();
@@ -17,7 +15,10 @@
       const enName = getMapEnglishName(h);
       const cnName = getMapDisplayName(h);
       const text = [
-        enName, cnName, String(h.id ?? ""), String(h.regionMapSectionId),
+        enName,
+        cnName,
+        String(h.id ?? ""),
+        String(h.regionMapSectionId),
         h.mapGroup !== undefined ? `mapGroup=${h.mapGroup}` : "",
         h.mapNum !== undefined ? `mapNum=${h.mapNum}` : "",
         h.mapGroup !== undefined ? `${h.mapGroup}:${h.mapNum}` : "",
@@ -57,10 +58,6 @@
     document.getElementById("scanInfo").textContent =
       `MapHeader 候选数量：${mapHeaders.length}\n当前筛选数量：${filteredHeaders.length}\n\n说明：地图列表显示顺序为 mapNum、mapGroup、地图编码、区域编码。`;
   };
-
-  // ================================
-  // Toolbar with mouse mode and terrain
-  // ================================
 
   function injectUiStyle() {
     if (document.getElementById("uiOverrideRuntimeStyle")) return;
@@ -109,11 +106,17 @@
     if (currentMapBar) currentMapBar.insertAdjacentElement("afterend", toolbar);
 
     for (const radio of toolbar.querySelectorAll('input[name="mouseMode"]')) {
-      radio.addEventListener("change", () => { if (radio.checked) setMouseMode(radio.value); });
+      radio.addEventListener("change", () => {
+        if (radio.checked) setMouseMode(radio.value);
+      });
     }
 
     const toggle = document.getElementById("blackGridToggle");
-    if (toggle) toggle.addEventListener("change", async () => { if (currentMap) await renderMap(currentMap, currentEvents); });
+    if (toggle) {
+      toggle.addEventListener("change", async () => {
+        if (currentMap) await renderMap(currentMap, currentEvents);
+      });
+    }
   }
 
   function setMouseMode(mode) {
@@ -142,7 +145,13 @@
       panel = document.createElement("div");
       panel.id = "terrainPaintPanel";
       panel.className = "terrain-paint-panel";
-      panel.innerHTML = `<div class="terrain-paint-header"><h2 class="terrain-paint-title">地形绘制</h2><div class="terrain-paint-tip">选择一个地形后点击地图格子应用。</div></div><div id="terrainSelectedInfo" class="terrain-selected">未选择地形。</div><div id="terrainList" class="terrain-list"></div>`;
+      panel.innerHTML = `
+        <div class="terrain-paint-header">
+          <h2 class="terrain-paint-title">地形绘制</h2>
+          <div class="terrain-paint-tip">选择一个地形后点击地图格子应用。</div>
+        </div>
+        <div id="terrainSelectedInfo" class="terrain-selected">未选择地形。</div>
+        <div id="terrainList" class="terrain-list"></div>`;
       rightPanel.appendChild(panel);
     }
 
@@ -150,23 +159,119 @@
     if (enabled) refreshTerrainPanel();
   }
 
+  function isBlackGridEnabled() {
+    return !!document.getElementById("blackGridToggle")?.checked;
+  }
+
+  function drawBlackGridOverlay(header) {
+    if (!header || !isBlackGridEnabled()) return;
+
+    const cs = getCellSize();
+    const w = header.layout.width;
+    const h = header.layout.height;
+    const maxX = w * cs;
+    const maxY = h * cs;
+
+    ctx.save();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+
+    for (let x = 0; x <= w; x++) {
+      const px = x * cs + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, maxY);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y <= h; y++) {
+      const py = y * cs + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(maxX, py);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function wrapRenderMapForGridToggle() {
+    const originalRenderMap = window.renderMap || renderMap;
+    if (!originalRenderMap || originalRenderMap.__gridToolbarWrapped) return;
+
+    const wrappedRenderMap = async function renderMapWithGridToolbar(header, events) {
+      const result = await originalRenderMap.call(this, header, events);
+      drawBlackGridOverlay(header);
+      if (currentMouseMode === "paint") refreshTerrainPanel();
+      return result;
+    };
+
+    wrappedRenderMap.__gridToolbarWrapped = true;
+    window.renderMap = wrappedRenderMap;
+
+    try {
+      renderMap = wrappedRenderMap;
+    } catch (err) {
+      // 保留 window.renderMap 包装即可。
+    }
+  }
+
+  function getUniqueBlockIdsForCurrentMap() {
+    if (!currentMap || !rom) return [];
+
+    const w = currentMap.layout.width;
+    const h = currentMap.layout.height;
+    const mapOff = ptrToOffset(currentMap.layout.mapPtr);
+    if (mapOff === null || !isValidOffset(mapOff, w * h * 2)) return [];
+
+    const counts = new Map();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const raw = readU16(mapOff + (y * w + x) * 2);
+        const blockId = raw & 0x03FF;
+        counts.set(blockId, (counts.get(blockId) || 0) + 1);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([blockId, count]) => ({ blockId, count }))
+      .sort((a, b) => a.blockId - b.blockId);
+  }
+
   function refreshTerrainPanel() {
     if (!currentMap || currentMouseMode !== "paint") return;
 
     const list = document.getElementById("terrainList");
+    if (!list) return;
+
     list.innerHTML = "";
     const uniqueBlocks = getUniqueBlockIdsForCurrentMap();
-    if (!uniqueBlocks.length) return;
 
-    if (selectedPaintBlockId === null || !uniqueBlocks.some(x=>x.blockId===selectedPaintBlockId)) selectedPaintBlockId = uniqueBlocks[0].blockId;
+    if (!uniqueBlocks.length) {
+      list.innerHTML = `<div class="empty-tip">当前地图没有读取到 blockId。请确认已经导入 ROM 并选中地图。</div>`;
+      refreshTerrainSelectionState();
+      return;
+    }
+
+    if (selectedPaintBlockId === null || !uniqueBlocks.some(x => x.blockId === selectedPaintBlockId)) {
+      selectedPaintBlockId = uniqueBlocks[0].blockId;
+    }
 
     for (const item of uniqueBlocks) {
+      const attr = typeof getMetatileAttributeInfo === "function" ? getMetatileAttributeInfo(item.blockId) : null;
       const card = document.createElement("button");
       card.type = "button";
       card.className = "terrain-card";
       card.dataset.blockId = String(item.blockId);
-      card.innerHTML = `<div class="terrain-card-id">${hex(item.blockId,4)}</div><div class="terrain-card-meta">${item.blockId>=512?"secondary":"primary"} / used ${item.count}</div>`;
-      card.onclick = ()=>{selectedPaintBlockId=item.blockId; refreshTerrainSelectionState();};
+      card.innerHTML = `
+        <div class="terrain-card-id">${hex(item.blockId, 4)}</div>
+        <div class="terrain-card-meta">${item.blockId >= 512 ? "secondary" : "primary"} / used ${item.count}</div>
+        <div class="terrain-card-meta">behavior=${attr?.behavior !== null && attr?.behavior !== undefined ? hex(attr.behavior, 3) : "?"} collision=${attr?.collision ?? "?"}</div>`;
+      card.onclick = () => {
+        selectedPaintBlockId = item.blockId;
+        refreshTerrainSelectionState();
+      };
       list.appendChild(card);
     }
 
@@ -175,23 +280,43 @@
 
   function refreshTerrainSelectionState() {
     const info = document.getElementById("terrainSelectedInfo");
-    if (info) info.textContent = selectedPaintBlockId===null?"未选择地形":`当前选择 blockId=${selectedPaintBlockId}`;
-    for (const card of document.querySelectorAll(".terrain-card")) card.classList.toggle("active", Number(card.dataset.blockId)===selectedPaintBlockId);
+    if (info) {
+      info.textContent = selectedPaintBlockId === null
+        ? "未选择地形。"
+        : `当前选择 blockId=${selectedPaintBlockId} (${hex(selectedPaintBlockId, 4)})`;
+    }
+    for (const card of document.querySelectorAll(".terrain-card")) {
+      card.classList.toggle("active", Number(card.dataset.blockId) === selectedPaintBlockId);
+    }
   }
 
-  function paintMapCell(x,y){
-    if (!currentMap||currentMouseMode!=='paint'||selectedPaintBlockId===null) return;
-    const w=currentMap.layout.width,h=currentMap.layout.height;
-    if(x<0||y<0||x>=w||y>=h) return;
-    const mapOff=ptrToOffset(currentMap.layout.mapPtr);
-    if(mapOff===null||!isValidOffset(mapOff+(y*w+x)*2,2)) return;
-    const oldRaw=readU16(mapOff+(y*w+x)*2);
-    const newRaw=(oldRaw&0xFC00)|(selectedPaintBlockId&0x03FF);
-    rom[mapOff+(y*w+x)*2]=newRaw&0xFF; rom[mapOff+(y*w+x)*2+1]=(newRaw>>8)&0xFF;
-    renderMap(currentMap,currentEvents);
+  function paintMapCell(x, y) {
+    if (!currentMap || currentMouseMode !== "paint" || selectedPaintBlockId === null) return;
+
+    const w = currentMap.layout.width;
+    const h = currentMap.layout.height;
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+
+    const mapOff = ptrToOffset(currentMap.layout.mapPtr);
+    const cellOff = mapOff === null ? null : mapOff + (y * w + x) * 2;
+    if (mapOff === null || !isValidOffset(cellOff, 2)) return;
+
+    const oldRaw = readU16(cellOff);
+    const newRaw = (oldRaw & 0xFC00) | (selectedPaintBlockId & 0x03FF);
+    rom[cellOff] = newRaw & 0xFF;
+    rom[cellOff + 1] = (newRaw >> 8) & 0xFF;
+
+    renderMap(currentMap, currentEvents);
   }
 
-  canvas.addEventListener("click",async e=>{if(currentMouseMode==='paint'){const cell=getMapCellFromMouseEvent(e);if(cell)paintMapCell(cell.x,cell.y);}},true);
+  canvas.addEventListener("click", async e => {
+    if (currentMouseMode !== "paint") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const cell = getMapCellFromMouseEvent(e);
+    if (cell) paintMapCell(cell.x, cell.y);
+  }, true);
 
   ensureMapToolbar();
   wrapRenderMapForGridToggle();
