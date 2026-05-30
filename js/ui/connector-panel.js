@@ -2,10 +2,9 @@
 // Connector panel
 // ============================================================
 // 地图连接器模式右侧面板。
+// 不依赖定时器和内部 active 标记；mode-controller 点击地图连接器时直接调用 render() 即显示。
 
 (function connectorPanelModule() {
-  let connectorModeActive = false;
-
   function writeS32LE(off, value) {
     const v = Number(value) | 0;
     rom[off] = v & 0xFF;
@@ -54,16 +53,9 @@
   function restoreRightPanel() {
     const rightPanel = document.querySelector(".panel.right");
     const panel = document.getElementById("mapConnectorPanel");
-    if (!rightPanel) return;
-
-    for (const child of Array.from(rightPanel.children)) {
-      if (child === panel) {
-        child.classList.remove("active");
-        child.style.display = "none";
-      } else {
-        child.style.display = "";
-      }
-    }
+    if (!rightPanel || !panel) return;
+    panel.classList.remove("active");
+    panel.style.display = "none";
   }
 
   function updateConnection(index) {
@@ -95,8 +87,6 @@
   }
 
   function renderConnectorPanel() {
-    if (!connectorModeActive) return;
-
     const panel = ensurePanel();
     if (!panel) return;
 
@@ -174,24 +164,11 @@
   }
 
   function install() {
-    const modeButtons = document.querySelectorAll(".editor-mode-option[data-editor-mode]");
-    for (const btn of modeButtons) {
-      btn.addEventListener("click", () => {
-        connectorModeActive = btn.dataset.editorMode === "connections";
-        setTimeout(() => {
-          if (connectorModeActive) renderConnectorPanel();
-          else restoreRightPanel();
-        }, 0);
-      });
-    }
-
     const oldSelectMap = window.selectMap || (typeof selectMap === "function" ? selectMap : null);
     if (oldSelectMap && !oldSelectMap.__connectorPanelWrapped) {
       const wrapped = function selectMapConnectorPanel(...args) {
         const result = oldSelectMap.apply(this, args);
-        setTimeout(() => {
-          if (connectorModeActive) renderConnectorPanel();
-        }, 0);
+        if ((window.RBEditorState?.mode || "") === "connections") renderConnectorPanel();
         return result;
       };
       wrapped.__connectorPanelWrapped = true;
@@ -203,5 +180,8 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
 
-  window.RBEditorConnectorPanel = { render: renderConnectorPanel };
+  window.RBEditorConnectorPanel = {
+    render: renderConnectorPanel,
+    restore: restoreRightPanel,
+  };
 })();
