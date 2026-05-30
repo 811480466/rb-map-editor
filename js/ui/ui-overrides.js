@@ -74,6 +74,130 @@
       `说明：地图列表显示顺序为 mapNum、mapGroup、地图编码、区域编码。`;
   };
 
+  function ensureMapToolbar() {
+    if (document.getElementById("mapToolbar")) return;
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .map-toolbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, .94);
+      }
+
+      .map-toolbar-title {
+        color: var(--blue-dark);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .map-toolbar-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text);
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .map-toolbar-option input {
+        width: auto;
+        margin: 0;
+        padding: 0;
+      }
+    `;
+    document.head.appendChild(style);
+
+    const toolbar = document.createElement("div");
+    toolbar.id = "mapToolbar";
+    toolbar.className = "map-toolbar";
+    toolbar.innerHTML = `
+      <span class="map-toolbar-title">工具栏</span>
+      <label class="map-toolbar-option">
+        <input id="blackGridToggle" type="checkbox" />
+        <span>网格</span>
+      </label>
+    `;
+
+    const currentMapBar = document.querySelector(".current-map-bar");
+    if (currentMapBar) {
+      currentMapBar.insertAdjacentElement("afterend", toolbar);
+    }
+
+    const toggle = document.getElementById("blackGridToggle");
+    if (toggle) {
+      toggle.addEventListener("change", async () => {
+        if (!currentMap) return;
+        await renderMap(currentMap, currentEvents);
+      });
+    }
+  }
+
+  function isBlackGridEnabled() {
+    return !!document.getElementById("blackGridToggle")?.checked;
+  }
+
+  function drawBlackGridOverlay(header) {
+    if (!header || !isBlackGridEnabled()) return;
+
+    const cs = getCellSize();
+    const w = header.layout.width;
+    const h = header.layout.height;
+    const maxX = w * cs;
+    const maxY = h * cs;
+
+    ctx.save();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+
+    for (let x = 0; x <= w; x++) {
+      const px = x * cs + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, maxY);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y <= h; y++) {
+      const py = y * cs + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(maxX, py);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function wrapRenderMapForGridToggle() {
+    const originalRenderMap = window.renderMap || renderMap;
+    if (!originalRenderMap || originalRenderMap.__gridToolbarWrapped) return;
+
+    const wrappedRenderMap = async function renderMapWithGridToolbar(header, events) {
+      const result = await originalRenderMap.call(this, header, events);
+      drawBlackGridOverlay(header);
+      return result;
+    };
+
+    wrappedRenderMap.__gridToolbarWrapped = true;
+    window.renderMap = wrappedRenderMap;
+
+    try {
+      renderMap = wrappedRenderMap;
+    } catch (err) {
+      // 部分浏览器不允许改写全局函数绑定时，保留 window.renderMap 包装即可。
+    }
+  }
+
+  ensureMapToolbar();
+  wrapRenderMapForGridToggle();
+
   const importBtn = document.getElementById("openSetupModal");
   if (importBtn) importBtn.textContent = "导入";
 })();
