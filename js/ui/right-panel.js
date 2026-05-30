@@ -1,8 +1,7 @@
 // ============================================================
 // Shared right panel helpers
 // ============================================================
-// 低风险重构：先把右侧面板的常用操作集中成统一接口。
-// 旧脚本仍可直接操作 DOM，后续逐步迁移到这里。
+// 右侧面板只保留当前模式需要的 DOM，不再在 HTML 里预置一堆隐藏元素。
 
 (function rightPanelModule() {
   const MODE_CLASSES = [
@@ -18,16 +17,31 @@
     return document.querySelector(".panel.right");
   }
 
+  function clearPanel() {
+    const panel = getPanel();
+    if (panel) panel.innerHTML = "";
+    return panel;
+  }
+
   function getTitle(panel = getPanel()) {
     return panel?.querySelector(":scope > h2") || null;
   }
 
-  function setTitle(text) {
-    const title = getTitle();
-    if (!title) return null;
+  function ensureTitle(text = "") {
+    const panel = getPanel();
+    if (!panel) return null;
+    let title = getTitle(panel);
+    if (!title) {
+      title = document.createElement("h2");
+      panel.prepend(title);
+    }
     title.textContent = text;
     title.style.display = "block";
     return title;
+  }
+
+  function setTitle(text) {
+    return ensureTitle(text);
   }
 
   function setModeClass(className = "") {
@@ -36,6 +50,62 @@
     panel.classList.remove(...MODE_CLASSES);
     if (className) panel.classList.add(className);
     return panel;
+  }
+
+  function ensureEventsPanel() {
+    const panel = getPanel();
+    if (!panel) return null;
+
+    setModeClass("mode-events");
+    clearPanel();
+    ensureTitle("地图事件");
+
+    const eventTab = document.createElement("div");
+    eventTab.id = "eventTab";
+    eventTab.className = "tab-panel active";
+    eventTab.innerHTML = `
+      <div class="summary" id="eventSummary">
+        <div>OBJ: 0</div>
+        <div>TRAINER: 0</div>
+        <div>WARP: 0</div>
+        <div>BG/COORD: 0</div>
+      </div>
+      <div id="eventList"></div>
+      <h3>事件详情</h3>
+      <pre id="eventDetail">点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。</pre>
+      <div id="warpTools" class="warp-tools empty"></div>
+    `;
+    panel.appendChild(eventTab);
+    return eventTab;
+  }
+
+  function ensureMapInfoPanel() {
+    const panel = getPanel();
+    if (!panel) return null;
+
+    setModeClass("mode-metadata");
+    clearPanel();
+    ensureTitle("地图信息");
+
+    const mapInfoTab = document.createElement("div");
+    mapInfoTab.id = "mapInfoTab";
+    mapInfoTab.className = "tab-panel active";
+    mapInfoTab.innerHTML = `<pre id="mapInfo">未加载地图。</pre>`;
+    panel.appendChild(mapInfoTab);
+    return mapInfoTab;
+  }
+
+  function ensureConnectionToolsPanel() {
+    const panel = getPanel();
+    if (!panel) return null;
+    let box = document.getElementById("connectionTools");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "connectionTools";
+      box.className = "warp-tools empty";
+      panel.appendChild(box);
+    }
+    return box;
   }
 
   function getDirectChild(id) {
@@ -62,53 +132,39 @@
 
     for (const child of Array.from(panel.children)) {
       const shouldShow = allowedSet.has(child);
-      if (!shouldShow) {
-        child.style.display = "none";
-        continue;
-      }
-
-      if (child === title) child.style.display = "block";
-      else child.style.display = options.display || "block";
+      child.style.display = shouldShow ? (child === title ? "block" : (options.display || "block")) : "none";
     }
 
     return panel;
   }
 
   function showMapInfoOnly() {
-    setModeClass("mode-metadata");
-    setTitle("地图信息");
-    const mapInfoTab = document.getElementById("mapInfoTab");
-    const eventTab = document.getElementById("eventTab");
-    const mapInfoBtn = document.getElementById("tabMapInfo");
-    const eventBtn = document.getElementById("tabEvents");
-
-    mapInfoTab?.classList.add("active");
-    eventTab?.classList.remove("active");
-    mapInfoBtn?.classList.add("active");
-    eventBtn?.classList.remove("active");
+    const mapInfoTab = ensureMapInfoPanel();
+    if (typeof currentMap !== "undefined" && currentMap && typeof buildMapInfoText === "function") {
+      const mapInfo = document.getElementById("mapInfo");
+      if (mapInfo) mapInfo.textContent = buildMapInfoText(currentMap);
+    }
     showOnly([mapInfoTab]);
   }
 
   function showEventsOnly() {
-    setModeClass("mode-events");
-    setTitle("地图事件");
-    const eventTab = document.getElementById("eventTab");
-    const mapInfoTab = document.getElementById("mapInfoTab");
-    const eventBtn = document.getElementById("tabEvents");
-    const mapInfoBtn = document.getElementById("tabMapInfo");
-
-    eventTab?.classList.add("active");
-    mapInfoTab?.classList.remove("active");
-    eventBtn?.classList.add("active");
-    mapInfoBtn?.classList.remove("active");
+    const eventTab = ensureEventsPanel();
+    if (typeof currentEvents !== "undefined" && typeof renderEventList === "function") {
+      renderEventList(currentEvents);
+    }
     showOnly([eventTab]);
   }
 
   window.RBEditorRightPanel = {
     getPanel,
+    clearPanel,
     getTitle,
+    ensureTitle,
     setTitle,
     setModeClass,
+    ensureEventsPanel,
+    ensureMapInfoPanel,
+    ensureConnectionToolsPanel,
     getDirectChild,
     setDisplay,
     showOnly,
