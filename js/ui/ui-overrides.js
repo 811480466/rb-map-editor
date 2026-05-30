@@ -1,11 +1,15 @@
 // ============================================================
-// UI overrides with paint mode and Porymap-style terrain selector
+// UI overrides with editor modes, terrain painter, events view, metadata form
 // ============================================================
 
 (function applyUiOverrides() {
-  let currentMouseMode = "view";
+  let editorMode = "terrain"; // terrain | events | metadata
+  let currentMouseMode = "paint"; // view | paint
   let selectedPaintBlockId = null;
   let originalRightPanelState = null;
+  let originalDrawEvent = null;
+
+  window.__rbEditorShowEvents = false;
 
   window.refreshMapList = function refreshMapListOverride() {
     const list = document.getElementById("mapList");
@@ -64,11 +68,33 @@
     const style = document.createElement("style");
     style.id = "uiOverrideRuntimeStyle";
     style.textContent = `
+      .map-canvas-scroll { overflow:auto !important; }
+      .map-canvas-scroll canvas { max-width:none; max-height:none; }
+
+      .editor-mode-bar { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:8px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,.96); }
+      .editor-mode-title { flex:0 0 auto; color:var(--muted); font-size:12px; font-weight:700; }
+      .editor-mode-options { display:flex; gap:8px; flex-wrap:wrap; }
+      .editor-mode-option { width:auto; margin:0; padding:7px 12px; border:1px solid #cfe0fb; border-radius:999px; background:#fff; color:var(--blue-dark); font-size:12px; font-weight:700; }
+      .editor-mode-option.active { background:var(--blue); border-color:var(--blue); color:#fff; }
+      .editor-mode-option:hover { background:#e8f1ff; color:var(--blue-dark); }
+      .editor-mode-option.active:hover { background:var(--blue-dark); color:#fff; }
+
       .map-toolbar { flex:0 0 auto; display:flex; align-items:center; gap:14px; padding:8px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,.94); }
       .map-toolbar-title { color:var(--blue-dark); font-size:13px; font-weight:700; }
       .map-toolbar-group { display:inline-flex; align-items:center; gap:8px; }
       .map-toolbar-option { display:inline-flex; align-items:center; gap:5px; color:var(--text); font-size:13px; cursor:pointer; user-select:none; }
       .map-toolbar-option input { width:auto; margin:0; padding:0; }
+
+      .metadata-panel { flex:1 1 auto; min-height:0; display:none; padding:18px; overflow:auto; background:#f8fbff; }
+      .metadata-panel.active { display:block; }
+      .metadata-card { max-width:720px; margin:0 auto; padding:18px; border:1px solid var(--border); border-radius:14px; background:#fff; box-shadow:var(--shadow); }
+      .metadata-card h3 { margin:0 0 14px; }
+      .metadata-form-row { display:grid; grid-template-columns:120px minmax(0, 1fr); gap:12px; align-items:center; margin-bottom:12px; }
+      .metadata-form-row label { color:var(--muted); font-size:13px; font-weight:700; }
+      .metadata-weather-host .weather-control { display:flex; width:100%; flex:1 1 auto; }
+      .metadata-weather-host .weather-control label { display:none; }
+      .metadata-weather-host .weather-control select { width:100%; }
+
       .terrain-paint-panel { display:none; height:100%; min-height:0; flex-direction:column; overflow:hidden; }
       .terrain-paint-panel.active { display:flex; }
       .terrain-section-title { flex:0 0 auto; margin:0 0 6px; color:#334155; font-size:12px; font-weight:700; }
@@ -85,6 +111,29 @@
     document.head.appendChild(style);
   }
 
+  function ensureEditorModeBar() {
+    if (document.getElementById("editorModeBar")) return;
+    injectUiStyle();
+
+    const bar = document.createElement("div");
+    bar.id = "editorModeBar";
+    bar.className = "editor-mode-bar";
+    bar.innerHTML = `
+      <span class="editor-mode-title">模式</span>
+      <div class="editor-mode-options">
+        <button type="button" class="editor-mode-option" data-editor-mode="terrain">地形编辑</button>
+        <button type="button" class="editor-mode-option" data-editor-mode="events">地图事件</button>
+        <button type="button" class="editor-mode-option" data-editor-mode="metadata">地图元数据</button>
+      </div>`;
+
+    const currentMapBar = document.querySelector(".current-map-bar");
+    if (currentMapBar) currentMapBar.insertAdjacentElement("afterend", bar);
+
+    for (const btn of bar.querySelectorAll("button[data-editor-mode]")) {
+      btn.addEventListener("click", () => setEditorMode(btn.dataset.editorMode));
+    }
+  }
+
   function ensureMapToolbar() {
     if (document.getElementById("mapToolbar")) return;
     injectUiStyle();
@@ -94,15 +143,15 @@
     toolbar.className = "map-toolbar";
     toolbar.innerHTML = `
       <span class="map-toolbar-title">工具栏</span>
-      <span class="map-toolbar-group" role="radiogroup" aria-label="鼠标模式">
-        <label class="map-toolbar-option"><input type="radio" name="mouseMode" value="view" checked/><span>查看</span></label>
-        <label class="map-toolbar-option"><input type="radio" name="mouseMode" value="paint"/><span>绘制</span></label>
+      <span id="mouseModeGroup" class="map-toolbar-group" role="radiogroup" aria-label="鼠标模式">
+        <label class="map-toolbar-option"><input type="radio" name="mouseMode" value="view"/><span>查看</span></label>
+        <label class="map-toolbar-option"><input type="radio" name="mouseMode" value="paint" checked/><span>绘制</span></label>
       </span>
       <label class="map-toolbar-option"><input id="blackGridToggle" type="checkbox"/><span>网格</span></label>
     `;
 
-    const currentMapBar = document.querySelector(".current-map-bar");
-    if (currentMapBar) currentMapBar.insertAdjacentElement("afterend", toolbar);
+    const modeBar = document.getElementById("editorModeBar");
+    if (modeBar) modeBar.insertAdjacentElement("afterend", toolbar);
 
     for (const radio of toolbar.querySelectorAll('input[name="mouseMode"]')) {
       radio.addEventListener("change", () => {
@@ -113,15 +162,94 @@
     const toggle = document.getElementById("blackGridToggle");
     if (toggle) {
       toggle.addEventListener("change", async () => {
-        if (currentMap) await renderMap(currentMap, currentEvents);
+        if (currentMap && editorMode !== "metadata") await renderMap(currentMap, currentEvents);
       });
     }
   }
 
+  function ensureMetadataPanel() {
+    let panel = document.getElementById("mapMetadataPanel");
+    if (panel) return panel;
+
+    const mapWrap = document.querySelector(".map-wrap");
+    if (!mapWrap) return null;
+
+    panel = document.createElement("div");
+    panel.id = "mapMetadataPanel";
+    panel.className = "metadata-panel";
+    panel.innerHTML = `
+      <div class="metadata-card">
+        <h3>地图元数据</h3>
+        <div class="metadata-form-row">
+          <label>天气</label>
+          <div id="metadataWeatherHost" class="metadata-weather-host"></div>
+        </div>
+      </div>`;
+
+    mapWrap.appendChild(panel);
+
+    const weather = document.querySelector(".weather-control");
+    const host = document.getElementById("metadataWeatherHost");
+    if (weather && host) host.appendChild(weather);
+
+    return panel;
+  }
+
+  function patchDrawEventVisibility() {
+    if (originalDrawEvent || typeof drawEvent !== "function") return;
+    originalDrawEvent = drawEvent;
+    const wrapped = function drawEventVisibilityWrapper(ev) {
+      if (!window.__rbEditorShowEvents) return;
+      return originalDrawEvent(ev);
+    };
+    try {
+      drawEvent = wrapped;
+      window.drawEvent = wrapped;
+    } catch (err) {
+      window.drawEvent = wrapped;
+    }
+  }
+
+  function setEditorMode(mode) {
+    editorMode = ["terrain", "events", "metadata"].includes(mode) ? mode : "terrain";
+    window.__rbEditorShowEvents = editorMode === "events";
+
+    const toolbar = document.getElementById("mapToolbar");
+    const mouseGroup = document.getElementById("mouseModeGroup");
+    const mapShell = document.querySelector(".map-connection-shell");
+    const legend = document.querySelector(".legend-bar");
+    const metadataPanel = ensureMetadataPanel();
+
+    for (const btn of document.querySelectorAll(".editor-mode-option")) {
+      btn.classList.toggle("active", btn.dataset.editorMode === editorMode);
+    }
+
+    if (toolbar) toolbar.style.display = editorMode === "metadata" ? "none" : "flex";
+    if (mouseGroup) mouseGroup.style.display = editorMode === "events" ? "none" : "inline-flex";
+    if (mapShell) mapShell.style.display = editorMode === "metadata" ? "none" : "grid";
+    if (legend) legend.style.display = editorMode === "events" ? "block" : "none";
+    if (metadataPanel) metadataPanel.classList.toggle("active", editorMode === "metadata");
+
+    if (editorMode === "events") {
+      setMouseMode("view");
+      setRightPanelPaintMode(false);
+    } else if (editorMode === "terrain") {
+      setMouseMode(currentMouseMode || "paint");
+    } else {
+      document.body.classList.remove("paint-mode");
+      setRightPanelPaintMode(false);
+    }
+
+    if (currentMap && editorMode !== "metadata") renderMap(currentMap, currentEvents);
+  }
+
   function setMouseMode(mode) {
     currentMouseMode = mode === "paint" ? "paint" : "view";
-    document.body.classList.toggle("paint-mode", currentMouseMode === "paint");
-    setRightPanelPaintMode(currentMouseMode === "paint");
+    for (const radio of document.querySelectorAll('input[name="mouseMode"]')) {
+      radio.checked = radio.value === currentMouseMode;
+    }
+    document.body.classList.toggle("paint-mode", editorMode === "terrain" && currentMouseMode === "paint");
+    setRightPanelPaintMode(editorMode === "terrain" && currentMouseMode === "paint");
   }
 
   function setRightPanelPaintMode(enabled) {
@@ -200,7 +328,7 @@
     const wrappedRenderMap = async function renderMapWithGridToolbar(header, events) {
       const result = await originalRenderMap.call(this, header, events);
       drawBlackGridOverlay(header);
-      if (currentMouseMode === "paint") refreshTerrainPanel();
+      if (editorMode === "terrain" && currentMouseMode === "paint") refreshTerrainPanel();
       return result;
     };
 
@@ -300,7 +428,7 @@
   }
 
   function refreshTerrainPanel() {
-    if (!currentMap || currentMouseMode !== "paint") return;
+    if (!currentMap || editorMode !== "terrain" || currentMouseMode !== "paint") return;
 
     const list = document.getElementById("terrainList");
     if (!list) return;
@@ -348,7 +476,7 @@
   }
 
   function paintMapCell(x, y) {
-    if (!currentMap || currentMouseMode !== "paint" || selectedPaintBlockId === null) return;
+    if (!currentMap || editorMode !== "terrain" || currentMouseMode !== "paint" || selectedPaintBlockId === null) return;
 
     const w = currentMap.layout.width;
     const h = currentMap.layout.height;
@@ -367,7 +495,7 @@
   }
 
   canvas.addEventListener("click", e => {
-    if (currentMouseMode !== "paint") return;
+    if (editorMode !== "terrain" || currentMouseMode !== "paint") return;
     e.preventDefault();
     e.stopImmediatePropagation();
 
@@ -375,6 +503,11 @@
     if (cell) paintMapCell(cell.x, cell.y);
   }, true);
 
+  injectUiStyle();
+  patchDrawEventVisibility();
+  ensureEditorModeBar();
   ensureMapToolbar();
+  ensureMetadataPanel();
   wrapRenderMapForGridToggle();
+  setEditorMode("terrain");
 })();
