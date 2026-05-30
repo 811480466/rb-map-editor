@@ -4,10 +4,12 @@
 // 接管地形瓦片选择和绘制：
 // - 统一同步 RBEditorState.terrainTab / selectedBlockId / mouseMode
 // - 点击瓦片库更新当前瓦片
-// - 绘制模式 + 地形瓦片 tab 点击地图时，只写 blockId，阻止旧绘制逻辑重复执行
+// - 绘制模式 + 地形瓦片 tab 点击地图时，只写当前 active 瓦片 blockId
+// - 在 window 捕获阶段拦截，避免旧 ui-overrides.js 的绘制逻辑用旧选中值覆盖
 
 (function terrainEditor() {
   const state = window.RBEditorState || {};
+  let lastSelectedBlockId = Number.isFinite(Number(state.selectedBlockId)) ? Number(state.selectedBlockId) & 0x03FF : null;
 
   function getActiveTab() {
     return document.querySelector(".terrain-editor-tab-btn.active")?.dataset.terrainTab || state.terrainTab || "tiles";
@@ -18,7 +20,15 @@
   }
 
   function getMouseMode() {
-    return document.querySelector('input[name="mouseMode"]:checked')?.value || state.mouseMode || "view";
+    const checked = document.querySelector('input[name="mouseMode"]:checked')?.value;
+    if (checked) return checked;
+    if (document.body.classList.contains("paint-mode")) return "paint";
+    return state.mouseMode || "view";
+  }
+
+  function isMapCanvasEvent(e) {
+    if (e.target?.id === "mapCanvas") return true;
+    return typeof e.composedPath === "function" && e.composedPath().some(el => el?.id === "mapCanvas");
   }
 
   function setActiveTab(tab) {
@@ -31,15 +41,25 @@
     document.getElementById("terrainEditorCollisionHost")?.classList.toggle("active", nextTab === "collision");
   }
 
+  function normalizeBlockId(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return n & 0x03FF;
+  }
+
   function getSelectedBlockId() {
     const active = document.querySelector(".tile-card.active");
-    const fromActive = Number(active?.dataset.blockId);
-    if (Number.isFinite(fromActive)) return fromActive & 0x03FF;
+    const fromActive = normalizeBlockId(active?.dataset.blockId);
+    if (fromActive !== null) return fromActive;
 
-    const fromState = Number(state.selectedBlockId);
-    if (Number.isFinite(fromState)) return fromState & 0x03FF;
+    if (lastSelectedBlockId !== null) return lastSelectedBlockId;
 
-    return null;
+    const fromState = normalizeBlockId(state.selectedBlockId);
+    if (fromState !== null) return fromState;
+
+    const first = document.querySelector(".tile-card");
+    const fromFirst = normalizeBlockId(first?.dataset.blockId);
+    return fromFirst;
   }
 
   function drawCurrentTilePreview(blockId, sourceCard = null) {
@@ -66,14 +86,17 @@
   }
 
   function selectBlock(blockId, sourceCard = null) {
-    const id = Number(blockId);
-    if (!Number.isFinite(id)) return;
+    const id = normalizeBlockId(blockId);
+    if (id === null) return;
 
-    state.selectedBlockId = id & 0x03FF;
+    lastSelectedBlockId = id;
+    state.selectedBlockId = id;
+    window.__rbSelectedBlockId = id;
+
     for (const card of document.querySelectorAll(".tile-card")) {
-      card.classList.toggle("active", Number(card.dataset.blockId) === state.selectedBlockId);
+      card.classList.toggle("active", normalizeBlockId(card.dataset.blockId) === id);
     }
-    drawCurrentTilePreview(state.selectedBlockId, sourceCard);
+    drawCurrentTilePreview(id, sourceCard);
   }
 
   function ensureInitialSelection() {
@@ -133,6 +156,7 @@
 
     const tileCard = e.target.closest(".tile-card");
     if (tileCard) {
+      e.preventDefault();
       selectBlock(tileCard.dataset.blockId, tileCard);
     }
   }, true);
@@ -145,7 +169,7 @@
     if (getEditorMode() !== "terrain") return;
     if (getActiveTab() !== "tiles") return;
     if (getMouseMode() !== "paint") return;
-    if (!e.target || e.target.id !== "mapCanvas") return;
+    if (!isMapCanvasEvent(e)) return;
     if (typeof getMapCellFromMouseEvent !== "function") return;
 
     const cell = getMapCellFromMouseEvent(e);
