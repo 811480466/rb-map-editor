@@ -1,9 +1,9 @@
 // ============================================================
-// UI overrides with editor modes, terrain painter, events view, metadata form
+// UI overrides with editor modes, terrain painter, events view, metadata form, connector editor
 // ============================================================
 
 (function applyUiOverrides() {
-  let editorMode = "terrain"; // terrain | events | metadata
+  let editorMode = "terrain"; // terrain | events | connections | metadata
   let currentMouseMode = "paint"; // view | paint
   let selectedPaintBlockId = null;
   let originalRightPanelState = null;
@@ -107,6 +107,18 @@
       .terrain-card.active { border-color:var(--blue); background:#dbeafe; box-shadow:0 0 0 2px rgba(37,99,235,.20); z-index:1; }
       .terrain-card canvas { width:32px; height:32px; image-rendering:pixelated; border:none; box-shadow:none; background:transparent; }
       body.paint-mode #mapCanvas { cursor:crosshair; }
+
+      .connector-panel { display:none; height:100%; min-height:0; overflow:auto; padding-right:4px; }
+      .connector-panel.active { display:block; }
+      .connector-head { margin-bottom:10px; padding:10px; border:1px solid var(--border); border-radius:10px; background:#f8fbff; font-size:12px; line-height:1.55; color:var(--text); }
+      .connector-card { margin-bottom:10px; padding:10px; border:1px solid var(--border); border-radius:10px; background:#fff; box-shadow:0 4px 14px rgba(15,23,42,.04); }
+      .connector-card-title { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; color:var(--blue-dark); font-size:13px; font-weight:800; }
+      .connector-grid { display:grid; grid-template-columns:90px minmax(0,1fr); gap:8px; align-items:center; }
+      .connector-grid label { color:var(--muted); font-size:12px; font-weight:700; }
+      .connector-grid input, .connector-grid select { width:100%; margin:0; padding:7px 8px; font-size:12px; }
+      .connector-info { margin-top:8px; color:var(--muted); font-size:12px; line-height:1.45; }
+      .connector-actions { display:flex; gap:8px; margin-top:10px; }
+      .connector-actions button { margin:0; padding:7px 9px; font-size:12px; }
     `;
     document.head.appendChild(style);
   }
@@ -123,6 +135,7 @@
       <div class="editor-mode-options">
         <button type="button" class="editor-mode-option" data-editor-mode="terrain">地形编辑</button>
         <button type="button" class="editor-mode-option" data-editor-mode="events">地图事件</button>
+        <button type="button" class="editor-mode-option" data-editor-mode="connections">地图连接器</button>
         <button type="button" class="editor-mode-option" data-editor-mode="metadata">地图元数据</button>
       </div>`;
 
@@ -195,6 +208,20 @@
     return panel;
   }
 
+  function ensureConnectorPanel() {
+    let panel = document.getElementById("mapConnectorPanel");
+    if (panel) return panel;
+
+    const rightPanel = document.querySelector(".panel.right");
+    if (!rightPanel) return null;
+
+    panel = document.createElement("div");
+    panel.id = "mapConnectorPanel";
+    panel.className = "connector-panel";
+    rightPanel.appendChild(panel);
+    return panel;
+  }
+
   function patchDrawEventVisibility() {
     if (originalDrawEvent || typeof drawEvent !== "function") return;
     originalDrawEvent = drawEvent;
@@ -210,8 +237,20 @@
     }
   }
 
+  function rememberRightPanelState() {
+    const rightPanel = document.querySelector(".panel.right");
+    if (!rightPanel || originalRightPanelState) return;
+
+    originalRightPanelState = new Map();
+    for (const el of Array.from(rightPanel.children)) {
+      if (el.id !== "terrainPaintPanel" && el.id !== "mapConnectorPanel") {
+        originalRightPanelState.set(el, el.style.display || "");
+      }
+    }
+  }
+
   function setEditorMode(mode) {
-    editorMode = ["terrain", "events", "metadata"].includes(mode) ? mode : "terrain";
+    editorMode = ["terrain", "events", "connections", "metadata"].includes(mode) ? mode : "terrain";
     window.__rbEditorShowEvents = editorMode === "events";
 
     const toolbar = document.getElementById("mapToolbar");
@@ -225,22 +264,24 @@
     }
 
     if (toolbar) toolbar.style.display = editorMode === "metadata" ? "none" : "flex";
-    if (mouseGroup) mouseGroup.style.display = editorMode === "events" ? "none" : "inline-flex";
+    if (mouseGroup) mouseGroup.style.display = editorMode === "terrain" ? "inline-flex" : "none";
     if (mapShell) mapShell.style.display = editorMode === "metadata" ? "none" : "grid";
     if (legend) legend.style.display = editorMode === "events" ? "block" : "none";
     if (metadataPanel) metadataPanel.classList.toggle("active", editorMode === "metadata");
 
-    if (editorMode === "events") {
+    setRightPanelPaintMode(editorMode === "terrain" && currentMouseMode === "paint");
+    setRightPanelConnectorMode(editorMode === "connections");
+
+    if (editorMode === "events" || editorMode === "connections") {
       setMouseMode("view");
-      setRightPanelPaintMode(false);
-    } else if (editorMode === "terrain") {
-      setMouseMode(currentMouseMode || "paint");
-    } else {
+    } else if (editorMode === "metadata") {
       document.body.classList.remove("paint-mode");
-      setRightPanelPaintMode(false);
+    } else {
+      setMouseMode(currentMouseMode || "paint");
     }
 
     if (currentMap && editorMode !== "metadata") renderMap(currentMap, currentEvents);
+    if (editorMode === "connections") refreshConnectorPanel();
   }
 
   function setMouseMode(mode) {
@@ -256,12 +297,7 @@
     const rightPanel = document.querySelector(".panel.right");
     if (!rightPanel) return;
 
-    if (!originalRightPanelState) {
-      originalRightPanelState = new Map();
-      for (const el of Array.from(rightPanel.children)) {
-        if (el.id !== "terrainPaintPanel") originalRightPanelState.set(el, el.style.display || "");
-      }
-    }
+    rememberRightPanelState();
 
     for (const [el, display] of originalRightPanelState.entries()) {
       el.style.display = enabled ? "none" : display;
@@ -282,6 +318,21 @@
 
     panel.classList.toggle("active", enabled);
     if (enabled) refreshTerrainPanel();
+  }
+
+  function setRightPanelConnectorMode(enabled) {
+    rememberRightPanelState();
+
+    for (const [el, display] of originalRightPanelState.entries()) {
+      el.style.display = enabled ? "none" : display;
+    }
+
+    const terrainPanel = document.getElementById("terrainPaintPanel");
+    if (terrainPanel) terrainPanel.classList.remove("active");
+
+    const connectorPanel = ensureConnectorPanel();
+    if (connectorPanel) connectorPanel.classList.toggle("active", enabled);
+    if (enabled) refreshConnectorPanel();
   }
 
   function isBlackGridEnabled() {
@@ -329,6 +380,7 @@
       const result = await originalRenderMap.call(this, header, events);
       drawBlackGridOverlay(header);
       if (editorMode === "terrain" && currentMouseMode === "paint") refreshTerrainPanel();
+      if (editorMode === "connections") refreshConnectorPanel();
       return result;
     };
 
@@ -339,6 +391,125 @@
       renderMap = wrappedRenderMap;
     } catch (err) {
       // 保留 window.renderMap 包装即可。
+    }
+  }
+
+  function writeS32LE(off, value) {
+    const v = Number(value) | 0;
+    rom[off] = v & 0xFF;
+    rom[off + 1] = (v >> 8) & 0xFF;
+    rom[off + 2] = (v >> 16) & 0xFF;
+    rom[off + 3] = (v >> 24) & 0xFF;
+  }
+
+  function normalizeByte(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Math.max(0, Math.min(255, Math.trunc(n)));
+  }
+
+  function normalizeS32(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Math.max(-2147483648, Math.min(2147483647, Math.trunc(n)));
+  }
+
+  function updateConnectionFromPanel(index) {
+    if (!currentMap) return;
+    const parsed = parseMapConnections(currentMap.connectionsPtr);
+    const conn = parsed.list.find(c => c.index === Number(index));
+    if (!conn || !isValidOffset(conn.offset, MAP_CONNECTION_SIZE)) return;
+
+    const direction = normalizeByte(document.getElementById(`connDirection_${index}`)?.value);
+    const offset = normalizeS32(document.getElementById(`connOffset_${index}`)?.value);
+    const mapGroup = normalizeByte(document.getElementById(`connGroup_${index}`)?.value);
+    const mapNum = normalizeByte(document.getElementById(`connMap_${index}`)?.value);
+
+    if (direction === null || offset === null || mapGroup === null || mapNum === null) {
+      alert("连接参数格式不正确。");
+      return;
+    }
+
+    rom[conn.offset + 0x00] = direction & 0xFF;
+    writeS32LE(conn.offset + 0x04, offset);
+    rom[conn.offset + 0x08] = mapGroup & 0xFF;
+    rom[conn.offset + 0x09] = mapNum & 0xFF;
+
+    currentMap.connectionsParsed = parseMapConnections(currentMap.connectionsPtr);
+    renderConnectionEdgeNav(currentMap);
+    refreshConnectorPanel();
+    if (currentMap) renderMap(currentMap, currentEvents);
+  }
+
+  function refreshConnectorPanel() {
+    if (!currentMap || editorMode !== "connections") return;
+
+    const panel = ensureConnectorPanel();
+    if (!panel) return;
+
+    const parsed = parseMapConnections(currentMap.connectionsPtr);
+    currentMap.connectionsParsed = parsed;
+    const connections = parsed.list || [];
+
+    let html = `
+      <h2>地图连接器</h2>
+      <div class="connector-head">
+        <div><b>当前地图：</b>${escapeHtml(getMapDisplayNameWithCode(currentMap))}</div>
+        <div>mapGroup=${currentMap.mapGroup ?? "?"} / mapNum=${currentMap.mapNum ?? "?"}</div>
+        <div>connectionsPtr=${escapeHtml(hex(currentMap.connectionsPtr))}</div>
+        <div>header=${parsed.offset !== null && parsed.offset !== undefined ? escapeHtml(hex(parsed.offset)) : "null"} / data=${parsed.dataOff !== null && parsed.dataOff !== undefined ? escapeHtml(hex(parsed.dataOff)) : "null"} / count=${parsed.count} / status=${escapeHtml(parsed.status)}</div>
+      </div>`;
+
+    if (!connections.length) {
+      panel.innerHTML = html + `<div class="empty-tip">当前地图没有可编辑连接。需要新增连接时，后续要先支持扩容/分配连接表空间。</div>`;
+      return;
+    }
+
+    html += connections.map(conn => {
+      const info = getConnectionDestinationInfo(conn, currentMap);
+      const targetName = info?.targetMap ? getMapDisplayNameWithCode(info.targetMap) : "未匹配地图";
+      const statusClass = info?.status === "ok" ? "warp-ok" : (info?.status === "bad" ? "warp-bad" : "warp-warn");
+      return `
+        <div class="connector-card" data-conn-index="${conn.index}">
+          <div class="connector-card-title">
+            <span>#${conn.index} ${escapeHtml(connectionDirectionName(conn.direction))}</span>
+            <span class="${statusClass}">${escapeHtml(info?.statusText || "未能判断")}</span>
+          </div>
+          <div class="connector-grid">
+            <label>方向</label>
+            <select id="connDirection_${conn.index}">
+              ${[1,2,3,4,5,6].map(d => `<option value="${d}" ${conn.direction === d ? "selected" : ""}>${escapeHtml(connectionDirectionName(d))}</option>`).join("")}
+            </select>
+            <label>偏移</label>
+            <input id="connOffset_${conn.index}" type="number" value="${conn.connectionOffset}" />
+            <label>目标Group</label>
+            <input id="connGroup_${conn.index}" type="number" min="0" max="255" value="${conn.mapGroup}" />
+            <label>目标Map</label>
+            <input id="connMap_${conn.index}" type="number" min="0" max="255" value="${conn.mapNum}" />
+          </div>
+          <div class="connector-info">
+            <div>目标：${escapeHtml(targetName)}</div>
+            <div>结构 offset=${escapeHtml(hex(conn.offset))}</div>
+          </div>
+          <div class="connector-actions">
+            <button type="button" data-action="save-conn" data-index="${conn.index}">保存修改</button>
+            <button type="button" class="secondary-btn" data-action="jump-conn" data-index="${conn.index}" ${info?.targetMap ? "" : "disabled"}>跳转目标地图</button>
+          </div>
+        </div>`;
+    }).join("");
+
+    panel.innerHTML = html;
+
+    for (const btn of panel.querySelectorAll("button[data-action='save-conn']")) {
+      btn.onclick = () => updateConnectionFromPanel(btn.dataset.index);
+    }
+
+    for (const btn of panel.querySelectorAll("button[data-action='jump-conn']")) {
+      btn.onclick = () => {
+        const idx = Number(btn.dataset.index);
+        const conn = connections.find(c => c.index === idx);
+        if (conn) jumpToConnectionTarget(conn);
+      };
     }
   }
 
@@ -508,6 +679,7 @@
   ensureEditorModeBar();
   ensureMapToolbar();
   ensureMetadataPanel();
+  ensureConnectorPanel();
   wrapRenderMapForGridToggle();
   setEditorMode("terrain");
 })();
