@@ -6,6 +6,10 @@
 (function rightPanelEventController() {
   let installed = false;
 
+  function hasEditorModeUi() {
+    return !!document.querySelector(".editor-mode-option");
+  }
+
   function mode() {
     return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || "events";
   }
@@ -201,6 +205,15 @@
 
   function install() {
     if (installed) return;
+
+    // 当前 index.html 仍然保留原始 tabEvents/eventList/mapInfo 结构。
+    // 如果页面没有 .editor-mode-option，说明还不是新版模式面板页面，不能重建右侧面板。
+    // 否则 main.js 导入 ROM 时会找不到 eventList，报 Cannot set properties of null。
+    if (!hasEditorModeUi()) {
+      window.renderRightPanel = function noopRenderRightPanel() {};
+      return;
+    }
+
     installed = true;
     wrapSelectMap();
     wrapRenderMap();
@@ -215,5 +228,5 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
-  window.renderRightPanel = renderRightPanel;
+  window.renderRightPanel = window.renderRightPanel || renderRightPanel;
 })();
