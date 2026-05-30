@@ -2,7 +2,7 @@
 // 地图格子 blockId / behavior / collision 查看
 // ============================================================
 
-const cellTooltip = (() => {
+function ensureCellTooltip() {
   let el = document.getElementById("cellTooltip");
   if (!el) {
     el = document.createElement("div");
@@ -28,7 +28,7 @@ const cellTooltip = (() => {
   });
 
   return el;
-})();
+}
 
 function getMapCellFromMouseEvent(e) {
   if (!currentMap) return null;
@@ -208,21 +208,27 @@ canvas.addEventListener("dblclick", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  if (!currentMap) return;
+  const tooltip = ensureCellTooltip();
+
+  if (!currentMap) {
+    tooltip.style.display = "none";
+    return;
+  }
 
   const cell = getMapCellFromMouseEvent(e);
   if (!cell) {
-    cellTooltip.style.display = "none";
+    tooltip.style.display = "none";
     return;
   }
 
   const info = getMapCellInfo(cell.x, cell.y);
-  cellTooltip.textContent = formatCellTooltip(info);
-  cellTooltip.style.left = `${e.clientX + 14}px`;
-  cellTooltip.style.top = `${e.clientY + 14}px`;
-  cellTooltip.style.display = "block";
+  tooltip.textContent = formatCellTooltip(info);
+  tooltip.style.left = `${e.clientX + 14}px`;
+  tooltip.style.top = `${e.clientY + 14}px`;
+  tooltip.style.display = "block";
 });
 
 canvas.addEventListener("mouseleave", () => {
-  cellTooltip.style.display = "none";
+  const tooltip = document.getElementById("cellTooltip");
+  if (tooltip) tooltip.style.display = "none";
 });
