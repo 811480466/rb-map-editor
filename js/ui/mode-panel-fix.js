@@ -4,6 +4,8 @@
 // 这里处理模式切换后的右侧标题、右侧内容显示，以及地图元数据页布局。
 
 (function modePanelFix() {
+  let userTouchedMouseMode = false;
+
   function injectStyle() {
     if (document.getElementById("modePanelFixStyle")) return;
 
@@ -32,7 +34,8 @@
       }
 
       .panel.right.mode-terrain-view > h2,
-      .panel.right.mode-terrain-paint > h2 {
+      .panel.right.mode-terrain-paint > h2,
+      .panel.right.mode-events > h2 {
         display: block !important;
         flex: 0 0 auto;
       }
@@ -63,6 +66,19 @@
       .panel.right.mode-terrain-paint > h3 {
         display: none !important;
       }
+
+      .panel.right.mode-events #eventTab {
+        display: block !important;
+      }
+
+      .panel.right.mode-events .tabs,
+      .panel.right.mode-events #mapInfoTab,
+      .panel.right.mode-events #connectionTools,
+      .panel.right.mode-events #warpTools,
+      .panel.right.mode-events #eventDetail,
+      .panel.right.mode-events > h3 {
+        display: none !important;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -76,11 +92,11 @@
   }
 
   function getMouseMode() {
-    return document.querySelector('input[name="mouseMode"]:checked')?.value || "paint";
+    return document.querySelector('input[name="mouseMode"]:checked')?.value || "view";
   }
 
   function setRightPanelClass(panel, className) {
-    panel.classList.remove("mode-terrain-view", "mode-terrain-paint");
+    panel.classList.remove("mode-terrain-view", "mode-terrain-paint", "mode-events");
     if (className) panel.classList.add(className);
   }
 
@@ -116,6 +132,24 @@
     }
   }
 
+  function showEventOnly(panel) {
+    const title = panel.querySelector(":scope > h2");
+    if (title) {
+      title.textContent = "地图事件";
+      title.style.display = "block";
+    }
+
+    const eventTab = document.getElementById("eventTab");
+    const mapInfoTab = document.getElementById("mapInfoTab");
+    const eventBtn = document.getElementById("tabEvents");
+    const mapInfoBtn = document.getElementById("tabMapInfo");
+
+    eventTab?.classList.add("active");
+    mapInfoTab?.classList.remove("active");
+    eventBtn?.classList.add("active");
+    mapInfoBtn?.classList.remove("active");
+  }
+
   function resetRightPanelTitle(panel, mode) {
     const title = panel.querySelector(":scope > h2");
     if (!title) return;
@@ -148,13 +182,35 @@
       return;
     }
 
+    if (mode === "events") {
+      setRightPanelClass(panel, "mode-events");
+      showEventOnly(panel);
+      return;
+    }
+
     resetRightPanelTitle(panel, mode);
+  }
+
+  function setMouseModeViewOnce() {
+    if (userTouchedMouseMode) return;
+
+    const viewRadio = document.querySelector('input[name="mouseMode"][value="view"]');
+    const paintRadio = document.querySelector('input[name="mouseMode"][value="paint"]');
+    if (!viewRadio || !paintRadio) return;
+
+    viewRadio.checked = true;
+    paintRadio.checked = false;
+    viewRadio.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function install() {
     injectStyle();
 
     document.addEventListener("click", (e) => {
+      if (e.target.closest('input[name="mouseMode"]')) {
+        userTouchedMouseMode = true;
+      }
+
       if (e.target.closest(".editor-mode-option") || e.target.closest('input[name="mouseMode"]')) {
         setTimeout(applyModePanelState, 0);
         setTimeout(applyModePanelState, 80);
@@ -163,12 +219,14 @@
 
     document.addEventListener("change", (e) => {
       if (e.target.matches('input[name="mouseMode"]')) {
+        userTouchedMouseMode = true;
         setTimeout(applyModePanelState, 0);
         setTimeout(applyModePanelState, 80);
       }
     }, true);
 
     const observer = new MutationObserver(() => {
+      setTimeout(setMouseModeViewOnce, 0);
       setTimeout(applyModePanelState, 0);
     });
 
@@ -179,6 +237,8 @@
       attributeFilter: ["class", "style"],
     });
 
+    setTimeout(setMouseModeViewOnce, 0);
+    setTimeout(setMouseModeViewOnce, 200);
     setTimeout(applyModePanelState, 0);
     setTimeout(applyModePanelState, 200);
   }
