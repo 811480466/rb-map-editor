@@ -2,7 +2,13 @@
 // 地图格子 blockId / behavior / collision 查看
 // ============================================================
 
-function ensureCellTooltip() {
+function showCellTooltip(text, x, y) {
+  if (window.RBEditorTooltip?.showTip) {
+    window.RBEditorTooltip.showTip(text, x, y);
+    return;
+  }
+
+  // 兼容兜底：如果 tooltip.js 没加载，仍然保留旧行为。
   let el = document.getElementById("cellTooltip");
   if (!el) {
     el = document.createElement("div");
@@ -10,10 +16,9 @@ function ensureCellTooltip() {
     el.className = "cell-tooltip";
     document.body.appendChild(el);
   }
-
   Object.assign(el.style, {
     position: "fixed",
-    display: "none",
+    display: "block",
     zIndex: "99999",
     pointerEvents: "none",
     maxWidth: "320px",
@@ -26,8 +31,19 @@ function ensureCellTooltip() {
     whiteSpace: "pre",
     boxShadow: "0 8px 24px rgba(15, 23, 42, 0.25)",
   });
+  el.textContent = text;
+  el.style.left = `${x + 14}px`;
+  el.style.top = `${y + 14}px`;
+}
 
-  return el;
+function hideCellTooltip() {
+  if (window.RBEditorTooltip?.hideTip) {
+    window.RBEditorTooltip.hideTip();
+    return;
+  }
+
+  const el = document.getElementById("cellTooltip");
+  if (el) el.style.display = "none";
 }
 
 function getMapCellFromMouseEvent(e) {
@@ -208,27 +224,21 @@ canvas.addEventListener("dblclick", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-  const tooltip = ensureCellTooltip();
-
   if (!currentMap) {
-    tooltip.style.display = "none";
+    hideCellTooltip();
     return;
   }
 
   const cell = getMapCellFromMouseEvent(e);
   if (!cell) {
-    tooltip.style.display = "none";
+    hideCellTooltip();
     return;
   }
 
   const info = getMapCellInfo(cell.x, cell.y);
-  tooltip.textContent = formatCellTooltip(info);
-  tooltip.style.left = `${e.clientX + 14}px`;
-  tooltip.style.top = `${e.clientY + 14}px`;
-  tooltip.style.display = "block";
+  showCellTooltip(formatCellTooltip(info), e.clientX, e.clientY);
 });
 
 canvas.addEventListener("mouseleave", () => {
-  const tooltip = document.getElementById("cellTooltip");
-  if (tooltip) tooltip.style.display = "none";
+  hideCellTooltip();
 });
