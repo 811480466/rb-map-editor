@@ -1,0 +1,69 @@
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panel-header h2 {
+  margin-bottom: 0;
+  line-height: 1.25;
+}
+
+.top-actions {
+  flex: 0 0 168px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.top-actions button {
+  margin: 0;
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.map-list {
+  max-height: calc(100vh - 135px);
+}
+
+.map-option-meta {
+  white-space: normal;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
+.map-meta-chip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-edge {
+  border-color: #cfe0fb !important;
+  background: rgba(255, 255, 255, .96) !important;
+  color: var(--blue-dark) !important;
+}
+
+.connection-edge:hover {
+  border-color: #93c5fd !important;
+  background: #e8f1ff !important;
+  color: var(--blue-dark) !important;
+}
+
+.connection-edge.conn-ok,
+.connection-edge.conn-warn,
+.connection-edge.conn-bad {
+  border-color: #93c5fd !important;
+  background: #ffffff !important;
+  color: var(--blue-dark) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .08), 0 6px 18px rgba(15, 23, 42, .06);
+}
+
+.connection-edge-sub {
+  color: #64748b;
+  opacity: 1;
+}
