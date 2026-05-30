@@ -1,0 +1,16 @@
+# ROM / save files
+*.gba
+*.gbc
+*.gb
+*.sav
+*.sgm
+*.ss0
+*.ss1
+*.ss2
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
