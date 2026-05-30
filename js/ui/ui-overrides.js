@@ -1,5 +1,5 @@
 // ============================================================
-// UI overrides with paint mode and terrain selector
+// UI overrides with paint mode and icon-only terrain selector
 // ============================================================
 
 (function applyUiOverrides() {
@@ -71,16 +71,11 @@
       .map-toolbar-option input { width:auto; margin:0; padding:0; }
       .terrain-paint-panel { display:none; height:100%; min-height:0; flex-direction:column; }
       .terrain-paint-panel.active { display:flex; }
-      .terrain-paint-header { flex:0 0 auto; margin-bottom:10px; }
-      .terrain-paint-title { margin:0 0 4px; color:var(--blue-dark); font-size:18px; }
-      .terrain-paint-tip { color:var(--muted); font-size:12px; line-height:1.45; }
-      .terrain-selected { flex:0 0 auto; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:#f8fbff; color:var(--text); font-size:12px; line-height:1.5; margin-bottom:10px; }
-      .terrain-list { flex:1 1 auto; min-height:0; overflow:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding-right:4px; }
-      .terrain-card { width:auto; margin:0; padding:8px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--text); text-align:left; font-weight:500; box-shadow:0 4px 14px rgba(15,23,42,.04); }
+      .terrain-list { flex:1 1 auto; min-height:0; overflow:auto; display:grid; grid-template-columns:repeat(auto-fill, 40px); align-content:start; gap:8px; padding:2px 4px 4px 0; }
+      .terrain-card { width:40px; height:40px; margin:0; padding:3px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); box-shadow:0 4px 14px rgba(15,23,42,.04); display:flex; align-items:center; justify-content:center; }
       .terrain-card:hover { border-color:#93c5fd; background:#f2f7ff; color:var(--text); }
-      .terrain-card.active { border-color:var(--blue); background:var(--blue-soft); box-shadow:0 0 0 3px rgba(37,99,235,.10); }
-      .terrain-card-id { color:#1e3a8a; font-weight:800; font-size:13px; }
-      .terrain-card-meta { margin-top:3px; color:var(--muted); font-size:11px; line-height:1.35; }
+      .terrain-card.active { border-color:var(--blue); background:var(--blue-soft); box-shadow:0 0 0 3px rgba(37,99,235,.14); }
+      .terrain-card canvas { width:32px; height:32px; image-rendering:pixelated; border:none; border-radius:4px; box-shadow:none; background:transparent; }
       body.paint-mode #mapCanvas { cursor:crosshair; }
     `;
     document.head.appendChild(style);
@@ -145,13 +140,7 @@
       panel = document.createElement("div");
       panel.id = "terrainPaintPanel";
       panel.className = "terrain-paint-panel";
-      panel.innerHTML = `
-        <div class="terrain-paint-header">
-          <h2 class="terrain-paint-title">地形绘制</h2>
-          <div class="terrain-paint-tip">选择一个地形后点击地图格子应用。</div>
-        </div>
-        <div id="terrainSelectedInfo" class="terrain-selected">未选择地形。</div>
-        <div id="terrainList" class="terrain-list"></div>`;
+      panel.innerHTML = `<div id="terrainList" class="terrain-list"></div>`;
       rightPanel.appendChild(panel);
     }
 
@@ -225,18 +214,46 @@
     const mapOff = ptrToOffset(currentMap.layout.mapPtr);
     if (mapOff === null || !isValidOffset(mapOff, w * h * 2)) return [];
 
-    const counts = new Map();
+    const records = new Map();
+    const eventCells = new Set((currentEvents || []).map(ev => `${ev.x},${ev.y}`));
+
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const raw = readU16(mapOff + (y * w + x) * 2);
         const blockId = raw & 0x03FF;
-        counts.set(blockId, (counts.get(blockId) || 0) + 1);
+        const old = records.get(blockId);
+        const isCleanSample = !eventCells.has(`${x},${y}`);
+
+        if (!old) {
+          records.set(blockId, { blockId, count: 1, x, y, clean: isCleanSample });
+        } else {
+          old.count++;
+          if (!old.clean && isCleanSample) {
+            old.x = x;
+            old.y = y;
+            old.clean = true;
+          }
+        }
       }
     }
 
-    return Array.from(counts.entries())
-      .map(([blockId, count]) => ({ blockId, count }))
-      .sort((a, b) => a.blockId - b.blockId);
+    return Array.from(records.values()).sort((a, b) => a.blockId - b.blockId);
+  }
+
+  function drawTerrainIcon(item, iconCanvas) {
+    const iconCtx = iconCanvas.getContext("2d");
+    iconCtx.imageSmoothingEnabled = false;
+    iconCtx.clearRect(0, 0, iconCanvas.width, iconCanvas.height);
+
+    if (!currentMap || !canvas) return;
+
+    const cs = getCellSize();
+    const sx = item.x * cs;
+    const sy = item.y * cs;
+
+    if (sx < 0 || sy < 0 || sx + cs > canvas.width || sy + cs > canvas.height) return;
+
+    iconCtx.drawImage(canvas, sx, sy, cs, cs, 0, 0, iconCanvas.width, iconCanvas.height);
   }
 
   function refreshTerrainPanel() {
@@ -250,7 +267,6 @@
 
     if (!uniqueBlocks.length) {
       list.innerHTML = `<div class="empty-tip">当前地图没有读取到 blockId。请确认已经导入 ROM 并选中地图。</div>`;
-      refreshTerrainSelectionState();
       return;
     }
 
@@ -259,15 +275,18 @@
     }
 
     for (const item of uniqueBlocks) {
-      const attr = typeof getMetatileAttributeInfo === "function" ? getMetatileAttributeInfo(item.blockId) : null;
       const card = document.createElement("button");
       card.type = "button";
       card.className = "terrain-card";
       card.dataset.blockId = String(item.blockId);
-      card.innerHTML = `
-        <div class="terrain-card-id">${hex(item.blockId, 4)}</div>
-        <div class="terrain-card-meta">${item.blockId >= 512 ? "secondary" : "primary"} / used ${item.count}</div>
-        <div class="terrain-card-meta">behavior=${attr?.behavior !== null && attr?.behavior !== undefined ? hex(attr.behavior, 3) : "?"} collision=${attr?.collision ?? "?"}</div>`;
+      card.title = `blockId=${hex(item.blockId, 4)}`;
+
+      const iconCanvas = document.createElement("canvas");
+      iconCanvas.width = 32;
+      iconCanvas.height = 32;
+      drawTerrainIcon(item, iconCanvas);
+
+      card.appendChild(iconCanvas);
       card.onclick = () => {
         selectedPaintBlockId = item.blockId;
         refreshTerrainSelectionState();
@@ -279,12 +298,6 @@
   }
 
   function refreshTerrainSelectionState() {
-    const info = document.getElementById("terrainSelectedInfo");
-    if (info) {
-      info.textContent = selectedPaintBlockId === null
-        ? "未选择地形。"
-        : `当前选择 blockId=${selectedPaintBlockId} (${hex(selectedPaintBlockId, 4)})`;
-    }
     for (const card of document.querySelectorAll(".terrain-card")) {
       card.classList.toggle("active", Number(card.dataset.blockId) === selectedPaintBlockId);
     }
@@ -309,7 +322,7 @@
     renderMap(currentMap, currentEvents);
   }
 
-  canvas.addEventListener("click", async e => {
+  canvas.addEventListener("click", e => {
     if (currentMouseMode !== "paint") return;
     e.preventDefault();
     e.stopImmediatePropagation();
