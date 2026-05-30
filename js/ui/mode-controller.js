@@ -19,6 +19,10 @@
     const style = document.createElement("style");
     style.id = "modeControllerStyle";
     style.textContent = `
+      .current-map-row > .weather-control {
+        display: none !important;
+      }
+
       .metadata-panel.active {
         display: flex !important;
         align-items: flex-start;
@@ -38,6 +42,10 @@
 
       .metadata-panel.active .metadata-form-row {
         grid-template-columns: 140px minmax(0, 1fr);
+      }
+
+      .metadata-weather-host > .weather-control {
+        display: flex !important;
       }
 
       .metadata-panel #metadataMapInfoBox,
@@ -70,7 +78,6 @@
     const toolbar = document.getElementById("mapToolbar");
     const weather = document.querySelector(".weather-control");
     const metadataWeatherHost = document.getElementById("metadataWeatherHost");
-    const currentMapRow = document.querySelector(".current-map-row");
 
     if (visible) {
       if (metadataWeatherHost && weather && weather.parentElement !== metadataWeatherHost) {
@@ -81,9 +88,6 @@
       if (toolbar) toolbar.style.display = "none";
       if (metadataPanel) metadataPanel.classList.add("active");
     } else {
-      if (currentMapRow && weather && weather.parentElement !== currentMapRow) {
-        currentMapRow.appendChild(weather);
-      }
       if (mapShell) mapShell.style.display = "grid";
       if (toolbar) toolbar.style.display = "flex";
       if (metadataPanel) metadataPanel.classList.remove("active");
