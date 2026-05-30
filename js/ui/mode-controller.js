@@ -55,6 +55,41 @@
     }
   }
 
+  function ensureMetadataPanel() {
+    let panel = document.getElementById("mapMetadataPanel");
+    if (!panel && window.RBEditorAppShell?.ensureMetadataPanel) {
+      panel = window.RBEditorAppShell.ensureMetadataPanel();
+    }
+    return panel;
+  }
+
+  function setCenterMetadataVisible(visible) {
+    const mapShell = document.querySelector(".map-connection-shell");
+    const legend = document.querySelector(".legend-bar");
+    const metadataPanel = ensureMetadataPanel();
+    const toolbar = document.getElementById("mapToolbar");
+    const weather = document.querySelector(".weather-control");
+    const metadataWeatherHost = document.getElementById("metadataWeatherHost");
+    const currentMapRow = document.querySelector(".current-map-row");
+
+    if (visible) {
+      if (metadataWeatherHost && weather && weather.parentElement !== metadataWeatherHost) {
+        metadataWeatherHost.appendChild(weather);
+      }
+      if (mapShell) mapShell.style.display = "none";
+      if (legend) legend.style.display = "none";
+      if (toolbar) toolbar.style.display = "none";
+      if (metadataPanel) metadataPanel.classList.add("active");
+    } else {
+      if (currentMapRow && weather && weather.parentElement !== currentMapRow) {
+        currentMapRow.appendChild(weather);
+      }
+      if (mapShell) mapShell.style.display = "grid";
+      if (toolbar) toolbar.style.display = "flex";
+      if (metadataPanel) metadataPanel.classList.remove("active");
+    }
+  }
+
   function getCurrentMode() {
     return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || state.mode || "terrain";
   }
@@ -114,7 +149,10 @@
   }
 
   function showEventsMode() {
+    setCenterMetadataVisible(false);
     hideTerrainPanel();
+    const legend = document.querySelector(".legend-bar");
+    if (legend) legend.style.display = "block";
     if (window.RBEditorRightPanel?.showEventsOnly) {
       window.RBEditorRightPanel.showEventsOnly();
       return;
@@ -132,6 +170,7 @@
   function showMetadataMode() {
     hideTerrainPanel();
     removeCenterMetadataMapInfo();
+    setCenterMetadataVisible(true);
     if (window.RBEditorRightPanel?.showMapInfoOnly) {
       window.RBEditorRightPanel.showMapInfoOnly();
       return;
@@ -147,14 +186,20 @@
   }
 
   function showTerrainMode() {
+    setCenterMetadataVisible(false);
     removeCenterMetadataMapInfo();
+    const legend = document.querySelector(".legend-bar");
+    if (legend) legend.style.display = "none";
     if (window.RBEditorTerrainPanel?.applyTerrainEditorState) {
       window.RBEditorTerrainPanel.applyTerrainEditorState();
     }
   }
 
   function showConnectionsMode() {
+    setCenterMetadataVisible(false);
     hideTerrainPanel();
+    const legend = document.querySelector(".legend-bar");
+    if (legend) legend.style.display = "none";
     const panel = document.querySelector(".panel.right");
     if (panel && window.RBEditorRightPanel?.setModeClass) {
       window.RBEditorRightPanel.setModeClass("mode-connections");
