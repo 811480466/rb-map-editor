@@ -1,6 +1,35 @@
 // ============================================================
 // 地图格子 blockId / behavior / collision 查看
 // ============================================================
+
+const cellTooltip = (() => {
+  let el = document.getElementById("cellTooltip");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "cellTooltip";
+    el.className = "cell-tooltip";
+    document.body.appendChild(el);
+  }
+
+  Object.assign(el.style, {
+    position: "fixed",
+    display: "none",
+    zIndex: "99999",
+    pointerEvents: "none",
+    maxWidth: "320px",
+    padding: "7px 9px",
+    borderRadius: "8px",
+    background: "rgba(15, 23, 42, 0.92)",
+    color: "#fff",
+    fontSize: "12px",
+    lineHeight: "1.45",
+    whiteSpace: "pre",
+    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.25)",
+  });
+
+  return el;
+})();
+
 function getMapCellFromMouseEvent(e) {
   if (!currentMap) return null;
   const rect = canvas.getBoundingClientRect();
