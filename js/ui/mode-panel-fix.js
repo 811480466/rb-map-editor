@@ -22,25 +22,32 @@
       .metadata-panel.active .metadata-card {
         width: min(1120px, 100%);
         max-width: none !important;
-        min-height: calc(100% - 12px);
+        min-height: auto !important;
       }
 
       .metadata-panel.active .metadata-card h3 {
-        font-size: 18px;
+        display: none !important;
       }
 
       .metadata-panel.active .metadata-form-row {
         grid-template-columns: 140px minmax(0, 1fr);
       }
 
+      .metadata-panel #metadataMapInfoBox,
+      .metadata-panel .metadata-map-info {
+        display: none !important;
+      }
+
       .panel.right.mode-terrain-view > h2,
       .panel.right.mode-terrain-paint > h2,
-      .panel.right.mode-events > h2 {
+      .panel.right.mode-events > h2,
+      .panel.right.mode-metadata > h2 {
         display: block !important;
         flex: 0 0 auto;
       }
 
-      .panel.right.mode-terrain-view #mapInfoTab {
+      .panel.right.mode-terrain-view #mapInfoTab,
+      .panel.right.mode-metadata #mapInfoTab {
         display: block !important;
       }
 
@@ -49,7 +56,16 @@
       .panel.right.mode-terrain-view #connectionTools,
       .panel.right.mode-terrain-view #warpTools,
       .panel.right.mode-terrain-view #eventDetail,
-      .panel.right.mode-terrain-view > h3 {
+      .panel.right.mode-terrain-view > h3,
+      .panel.right.mode-metadata #eventTab,
+      .panel.right.mode-metadata .tabs,
+      .panel.right.mode-metadata #connectionTools,
+      .panel.right.mode-metadata #warpTools,
+      .panel.right.mode-metadata #eventDetail,
+      .panel.right.mode-metadata #mapConnectorPanel,
+      .panel.right.mode-metadata #terrainPaintPanel,
+      .panel.right.mode-metadata #terrainEditorPanel,
+      .panel.right.mode-metadata > h3 {
         display: none !important;
       }
 
@@ -96,7 +112,7 @@
   }
 
   function setRightPanelClass(panel, className) {
-    panel.classList.remove("mode-terrain-view", "mode-terrain-paint", "mode-events");
+    panel.classList.remove("mode-terrain-view", "mode-terrain-paint", "mode-events", "mode-metadata");
     if (className) panel.classList.add(className);
   }
 
@@ -156,12 +172,19 @@
 
     if (mode === "events") title.textContent = "地图事件";
     else if (mode === "connections") title.textContent = "地图连接器";
-    else if (mode === "metadata") title.textContent = "地图元数据";
     else title.textContent = "地图信息";
+  }
+
+  function removeCenterMetadataMapInfo() {
+    document.getElementById("metadataMapInfoBox")?.remove();
+    for (const el of document.querySelectorAll("#mapMetadataPanel .metadata-map-info")) {
+      el.remove();
+    }
   }
 
   function applyModePanelState() {
     injectStyle();
+    removeCenterMetadataMapInfo();
 
     const panel = getRightPanel();
     if (!panel) return;
@@ -185,6 +208,12 @@
     if (mode === "events") {
       setRightPanelClass(panel, "mode-events");
       showEventOnly(panel);
+      return;
+    }
+
+    if (mode === "metadata") {
+      setRightPanelClass(panel, "mode-metadata");
+      showMapInfoOnly(panel);
       return;
     }
 
