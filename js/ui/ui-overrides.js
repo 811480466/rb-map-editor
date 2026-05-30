@@ -145,9 +145,9 @@
       panel.id = "terrainPaintPanel";
       panel.className = "terrain-paint-panel";
       panel.innerHTML = `
-        <div class="terrain-section-title">Selection</div>
+        <div class="terrain-section-title">当前地形</div>
         <div class="terrain-selection-box"><canvas id="terrainSelectionCanvas" width="32" height="32"></canvas></div>
-        <div class="terrain-section-title">Metatiles</div>
+        <div class="terrain-section-title">地形库</div>
         <div class="terrain-library-wrap"><div id="terrainList" class="terrain-library-grid"></div></div>`;
       rightPanel.appendChild(panel);
     }
