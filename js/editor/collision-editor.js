@@ -1,13 +1,12 @@
 // ============================================================
 // Collision editor unified module
 // ============================================================
-// 整合原 collision-panel-layout-fix.js 和 collision-click-fix.js：
 // - 负责地图碰撞 tab 的右侧布局
 // - 负责查看模式点击格子读取高度/碰撞
-// - 负责绘制模式点击格子只写 collision/elevation，并阻止旧瓦片绘制逻辑继续执行
+// - 负责绘制模式点击格子只写 collision/elevation
 
 (function collisionEditor() {
-  const state = window.RBEditorState || { collision: {} };
+  const state = window.RBEditorState || (window.RBEditorState = { collision: {} });
 
   function injectStyle() {
     if (document.getElementById("collisionEditorStyle")) return;
@@ -223,6 +222,8 @@
     const raw = readU16(cellOff);
     const blockId = raw & 0x03FF;
     const newRaw = blockId | ((collision & 0x03) << 10) | ((elevation & 0x0F) << 12);
+    if (newRaw === raw) return true;
+
     rom[cellOff] = newRaw & 0xFF;
     rom[cellOff + 1] = (newRaw >> 8) & 0xFF;
 
@@ -236,11 +237,11 @@
     injectStyle();
 
     const { host, elevationInput, collisionInput, opacityInput } = getInputs();
-    if (!host || !elevationInput || !collisionInput || !opacityInput) return;
+    if (!host || !elevationInput || !collisionInput || !opacityInput) return false;
 
     if (host.dataset.collisionEditorReady === "1") {
       updateCurrentDisplay(host);
-      return;
+      return true;
     }
 
     const opacityValue = opacityInput.value;
@@ -310,17 +311,12 @@
 
     host.dataset.collisionEditorReady = "1";
     updateCurrentDisplay(host);
-  }
-
-  function scheduleEnhance() {
-    setTimeout(enhancePanel, 0);
-    setTimeout(enhancePanel, 80);
-    setTimeout(enhancePanel, 200);
+    return true;
   }
 
   document.addEventListener("click", (e) => {
     if (e.target.closest(".terrain-editor-tab-btn") || e.target.closest(".editor-mode-option")) {
-      scheduleEnhance();
+      enhancePanel();
     }
   }, true);
 
@@ -348,17 +344,15 @@
     }
   }, true);
 
-  const observer = new MutationObserver(() => {
-    if (isCollisionTab()) scheduleEnhance();
-  });
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      observer.observe(document.body, { subtree: true, childList: true });
-      scheduleEnhance();
-    });
+    document.addEventListener("DOMContentLoaded", enhancePanel);
   } else {
-    observer.observe(document.body, { subtree: true, childList: true });
-    scheduleEnhance();
+    enhancePanel();
   }
+
+  window.RBEditorCollisionEditor = {
+    enhancePanel,
+    updateCurrentDisplay,
+    setCollisionValue,
+  };
 })();
