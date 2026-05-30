@@ -2,14 +2,13 @@
 // Terrain editor unified module
 // ============================================================
 // 接管地形瓦片选择和绘制：
-// - 统一同步 RBEditorState.terrainTab / selectedBlockId / mouseMode
-// - 点击瓦片库更新当前瓦片
+// - 点击瓦片库只更新当前选择，不重建瓦片库，不重绘整张地图
 // - 绘制模式 + 地形瓦片 tab 点击地图时，只写当前 active 瓦片 blockId
-// - 在 window 捕获阶段拦截，避免旧 ui-overrides.js 的绘制逻辑用旧选中值覆盖
 
 (function terrainEditor() {
-  const state = window.RBEditorState || {};
+  const state = window.RBEditorState || (window.RBEditorState = {});
   let lastSelectedBlockId = Number.isFinite(Number(state.selectedBlockId)) ? Number(state.selectedBlockId) & 0x03FF : null;
+  let lastActiveTileCard = null;
 
   function getActiveTab() {
     return document.querySelector(".terrain-editor-tab-btn.active")?.dataset.terrainTab || state.terrainTab || "tiles";
@@ -48,7 +47,7 @@
   }
 
   function getSelectedBlockId() {
-    const active = document.querySelector(".tile-card.active");
+    const active = lastActiveTileCard?.isConnected ? lastActiveTileCard : document.querySelector(".tile-card.active");
     const fromActive = normalizeBlockId(active?.dataset.blockId);
     if (fromActive !== null) return fromActive;
 
@@ -58,8 +57,7 @@
     if (fromState !== null) return fromState;
 
     const first = document.querySelector(".tile-card");
-    const fromFirst = normalizeBlockId(first?.dataset.blockId);
-    return fromFirst;
+    return normalizeBlockId(first?.dataset.blockId);
   }
 
   function drawCurrentTilePreview(blockId, sourceCard = null) {
@@ -93,17 +91,35 @@
     state.selectedBlockId = id;
     window.__rbSelectedBlockId = id;
 
-    for (const card of document.querySelectorAll(".tile-card")) {
-      card.classList.toggle("active", normalizeBlockId(card.dataset.blockId) === id);
+    const nextActive = sourceCard || document.querySelector(`.tile-card[data-block-id="${id}"]`);
+
+    // 关键优化：不要每次选择都遍历整个瓦片库，只更新上一个和当前两个按钮。
+    if (lastActiveTileCard && lastActiveTileCard !== nextActive && lastActiveTileCard.isConnected) {
+      lastActiveTileCard.classList.remove("active");
     }
-    drawCurrentTilePreview(id, sourceCard);
+
+    const domActive = document.querySelector(".tile-card.active");
+    if (domActive && domActive !== nextActive) domActive.classList.remove("active");
+
+    if (nextActive) {
+      nextActive.classList.add("active");
+      lastActiveTileCard = nextActive;
+    }
+
+    drawCurrentTilePreview(id, nextActive);
   }
 
   function ensureInitialSelection() {
     if (getActiveTab() !== "tiles") return;
     const active = document.querySelector(".tile-card.active");
     if (active) {
-      selectBlock(active.dataset.blockId, active);
+      lastActiveTileCard = active;
+      const id = normalizeBlockId(active.dataset.blockId);
+      if (id !== null) {
+        lastSelectedBlockId = id;
+        state.selectedBlockId = id;
+        drawCurrentTilePreview(id, active);
+      }
       return;
     }
 
@@ -131,6 +147,8 @@
 
     const oldRaw = readU16(cellOff);
     const newRaw = (oldRaw & 0xFC00) | (selectedBlockId & 0x03FF);
+    if (newRaw === oldRaw) return true;
+
     rom[cellOff] = newRaw & 0xFF;
     rom[cellOff + 1] = (newRaw >> 8) & 0xFF;
 
@@ -149,8 +167,7 @@
     const tabBtn = e.target.closest(".terrain-editor-tab-btn");
     if (tabBtn && tabBtn.dataset.terrainTab) {
       setActiveTab(tabBtn.dataset.terrainTab);
-      setTimeout(syncStateFromUi, 0);
-      setTimeout(syncStateFromUi, 80);
+      syncStateFromUi();
       return;
     }
 
@@ -181,22 +198,10 @@
     paintTileToCell(cell);
   }, true);
 
-  const observer = new MutationObserver(() => {
-    if (getEditorMode() === "terrain" && getActiveTab() === "tiles") {
-      setTimeout(syncStateFromUi, 0);
-    }
-  });
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
-      setTimeout(syncStateFromUi, 0);
-      setTimeout(syncStateFromUi, 250);
-    });
+    document.addEventListener("DOMContentLoaded", syncStateFromUi);
   } else {
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
-    setTimeout(syncStateFromUi, 0);
-    setTimeout(syncStateFromUi, 250);
+    syncStateFromUi();
   }
 
   window.RBEditorTerrain = {
