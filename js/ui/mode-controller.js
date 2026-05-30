@@ -6,6 +6,9 @@
 // - 鼠标模式 view/paint
 // - 地形子 tab tiles/collision
 // - 非地形模式右侧面板显示
+//
+// 说明：右侧 panel 不再使用 MutationObserver / 定时器反复刷新，
+// 只在点击模式、点击 tab、切换鼠标模式、初始化时主动切换。
 
 (function modeController() {
   const state = window.RBEditorState || (window.RBEditorState = {});
@@ -57,7 +60,10 @@
   }
 
   function getMouseMode() {
-    return document.querySelector('input[name="mouseMode"]:checked')?.value || state.mouseMode || "view";
+    const checked = document.querySelector('input[name="mouseMode"]:checked')?.value;
+    if (checked) return checked;
+    if (document.body.classList.contains("paint-mode")) return "paint";
+    return state.mouseMode || "view";
   }
 
   function getTerrainTab() {
@@ -67,6 +73,7 @@
   function syncMouseMode() {
     const mouseMode = getMouseMode() === "paint" ? "paint" : "view";
     state.mouseMode = mouseMode;
+    document.body.classList.toggle("paint-mode", state.mode === "terrain" && mouseMode === "paint");
     return mouseMode;
   }
 
@@ -143,7 +150,6 @@
     removeCenterMetadataMapInfo();
     if (window.RBEditorTerrainPanel?.applyTerrainEditorState) {
       window.RBEditorTerrainPanel.applyTerrainEditorState();
-      return;
     }
   }
 
@@ -153,16 +159,17 @@
     if (panel && window.RBEditorRightPanel?.setModeClass) {
       window.RBEditorRightPanel.setModeClass("mode-connections");
     }
-    // connector-display-fix.js 负责真正渲染连接器面板，这里只同步状态，避免重复实现。
+    if (window.RBEditorConnectorPanel?.render) {
+      window.RBEditorConnectorPanel.render();
+    }
   }
 
   function applyModeState() {
     injectStyle();
-    syncMouseMode();
-    state.terrainTab = getTerrainTab();
-
     const mode = getCurrentMode();
     state.mode = mode;
+    syncMouseMode();
+    state.terrainTab = getTerrainTab();
 
     if (mode === "terrain") showTerrainMode();
     else if (mode === "events") showEventsMode();
@@ -174,33 +181,26 @@
     const modeBtn = e.target.closest(".editor-mode-option");
     if (modeBtn && modeBtn.dataset.editorMode) {
       setEditorMode(modeBtn.dataset.editorMode);
-      setTimeout(applyModeState, 80);
       return;
     }
 
     const tabBtn = e.target.closest(".terrain-editor-tab-btn");
     if (tabBtn && tabBtn.dataset.terrainTab) {
       setTerrainTab(tabBtn.dataset.terrainTab);
-      setTimeout(applyModeState, 80);
+      applyModeState();
     }
   }, true);
 
   document.addEventListener("change", (e) => {
     if (e.target.matches('input[name="mouseMode"]')) {
       syncMouseMode();
-      setTimeout(applyModeState, 0);
+      applyModeState();
     }
   }, true);
 
-  const observer = new MutationObserver(() => {
-    setTimeout(applyModeState, 0);
-  });
-
   function install() {
     injectStyle();
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style"] });
-    setTimeout(applyModeState, 0);
-    setTimeout(applyModeState, 250);
+    applyModeState();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
