@@ -25,6 +25,180 @@ const GBA_BASE = 0x08000000;
 const GMAPGROUPS_OFFSET = 0x00552AB4;
 const MAP_GROUP_COUNT = 34;
 
+// ============================================================
+// ROM 读取器
+// 说明：所有底层 ROM 字节读取、指针转换、偏移校验都集中在这个类里。
+// 外部旧代码仍可继续使用 readU8/readU16/readPtr 等函数；这些函数只是兼容包装。
+// ============================================================
+class RomReader {
+  constructor(bytes = null, gbaBase = GBA_BASE) {
+    this.bytes = bytes;
+    this.gbaBase = gbaBase;
+  }
+
+  setBytes(bytes) {
+    this.bytes = bytes;
+  }
+
+  get size() {
+    return this.bytes?.length ?? 0;
+  }
+
+  hasRom() {
+    return !!this.bytes;
+  }
+
+  isValidOffset(off, need = 1) {
+    return Number.isInteger(off) && off >= 0 && off + need <= this.size;
+  }
+
+  ptrToOffset(ptr) {
+    if (!this.hasRom()) return null;
+    if (ptr >= this.gbaBase && ptr < this.gbaBase + this.size) {
+      return ptr - this.gbaBase;
+    }
+    return null;
+  }
+
+  offsetToPtr(off) {
+    return this.gbaBase + off;
+  }
+
+  isValidPtr(ptr, need = 1) {
+    const off = this.ptrToOffset(ptr);
+    return off !== null && this.isValidOffset(off, need);
+  }
+
+  u8(off) {
+    return this.bytes[off];
+  }
+
+  u16(off) {
+    return this.bytes[off] | (this.bytes[off + 1] << 8);
+  }
+
+  s16(off) {
+    const v = this.u16(off);
+    return v & 0x8000 ? v - 0x10000 : v;
+  }
+
+  u32(off) {
+    return (
+      this.bytes[off] |
+      (this.bytes[off + 1] << 8) |
+      (this.bytes[off + 2] << 16) |
+      (this.bytes[off + 3] << 24)
+    ) >>> 0;
+  }
+
+  s32(off) {
+    const v = this.u32(off);
+    return v & 0x80000000 ? v - 0x100000000 : v;
+  }
+
+  ptr(off) {
+    return this.u32(off);
+  }
+
+  bytesEqual(off, bytes) {
+    if (!this.isValidOffset(off, bytes.length)) return false;
+    for (let i = 0; i < bytes.length; i++) {
+      if (this.bytes[off + i] !== bytes[i]) return false;
+    }
+    return true;
+  }
+
+  slice(off, length) {
+    if (!this.isValidOffset(off, length)) return null;
+    return this.bytes.slice(off, off + length);
+  }
+
+  readBytesFromPtr(ptr, length) {
+    const off = this.ptrToOffset(ptr);
+    if (off === null) return null;
+    return this.slice(off, length);
+  }
+
+  writeU8(off, value) {
+    if (!this.isValidOffset(off, 1)) return false;
+    this.bytes[off] = value & 0xFF;
+    return true;
+  }
+}
+
+let romReader = new RomReader(null);
+
+function getRomReader() {
+  // 兼容旧代码中直接给全局 rom 赋值的写法。
+  if (romReader.bytes !== rom) {
+    romReader.setBytes(rom);
+  }
+  return romReader;
+}
+
+function setRomBytes(bytes, fileName = "") {
+  rom = bytes;
+  romReader.setBytes(bytes);
+  if (fileName) romFileName = fileName;
+}
+
+function readU8(off) {
+  return getRomReader().u8(off);
+}
+
+function readU16(off) {
+  return getRomReader().u16(off);
+}
+
+function readS16(off) {
+  return getRomReader().s16(off);
+}
+
+function readS32(off) {
+  return getRomReader().s32(off);
+}
+
+function readU32(off) {
+  return getRomReader().u32(off);
+}
+
+function readPtr(off) {
+  return getRomReader().ptr(off);
+}
+
+function ptrToOffset(ptr) {
+  return getRomReader().ptrToOffset(ptr);
+}
+
+function offsetToPtr(off) {
+  return getRomReader().offsetToPtr(off);
+}
+
+function isValidOffset(off, need = 1) {
+  return getRomReader().isValidOffset(off, need);
+}
+
+function isValidPtr(ptr, need = 1) {
+  return getRomReader().isValidPtr(ptr, need);
+}
+
+function bytesEqualRom(off, bytes) {
+  return getRomReader().bytesEqual(off, bytes);
+}
+
+function readRawBytesFromRom(ptr, length) {
+  return getRomReader().readBytesFromPtr(ptr, length);
+}
+
+function writeU8(off, value) {
+  return getRomReader().writeU8(off, value);
+}
+
+function hex(value, width = 8) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "null";
+  return "0x" + value.toString(16).toUpperCase().padStart(width, "0");
+}
+
 
 // ============================================================
 // 地图名称中文翻译
@@ -170,55 +344,3 @@ const ctx = canvas.getContext("2d");
 const cellTooltip = document.createElement("div");
 cellTooltip.className = "cell-tooltip";
 document.body.appendChild(cellTooltip);
-
-function readU8(off) {
-  return rom[off];
-}
-
-function readU16(off) {
-  return rom[off] | (rom[off + 1] << 8);
-}
-
-function readS16(off) {
-  const v = readU16(off);
-  return v & 0x8000 ? v - 0x10000 : v;
-}
-
-function readS32(off) {
-  const v = readU32(off);
-  return v & 0x80000000 ? v - 0x100000000 : v;
-}
-
-function readU32(off) {
-  return (
-    rom[off] |
-    (rom[off + 1] << 8) |
-    (rom[off + 2] << 16) |
-    (rom[off + 3] << 24)
-  ) >>> 0;
-}
-
-function hex(value, width = 8) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "null";
-  return "0x" + value.toString(16).toUpperCase().padStart(width, "0");
-}
-
-function ptrToOffset(ptr) {
-  if (ptr >= 0x08000000 && ptr < 0x0A000000) {
-    return ptr - GBA_BASE;
-  }
-  return null;
-}
-
-function isValidOffset(off, need = 1) {
-  return Number.isInteger(off) && off >= 0 && off + need <= rom.length;
-}
-
-function isValidPtr(ptr, need = 1) {
-  const off = ptrToOffset(ptr);
-  return off !== null && isValidOffset(off, need);
-}
-
-function readPtr(off) {
-  return readU32(off);
-}
