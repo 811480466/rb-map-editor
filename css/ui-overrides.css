@@ -114,3 +114,27 @@ body,
 .script-viewer-close:hover {
   background: #dfeeff !important;
 }
+
+/* 脚本查看器内普通操作按钮：不要撑满，不要 hover 成深蓝 */
+.script-viewer-toolbar {
+  justify-content: flex-end !important;
+}
+
+.script-viewer-action-btn,
+.script-viewer-open-btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 96px !important;
+  max-width: none !important;
+  margin: 0 !important;
+  background: #f7fbff !important;
+  border-color: #bfd1ec !important;
+  color: #16447d !important;
+}
+
+.script-viewer-action-btn:hover,
+.script-viewer-open-btn:hover {
+  background: #eef6ff !important;
+  border-color: #9fc3f3 !important;
+  color: #1f5fbf !important;
+}
