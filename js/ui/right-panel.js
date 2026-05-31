@@ -11,6 +11,7 @@
     "mode-events",
     "mode-metadata",
     "mode-connections",
+    "mode-wild",
   ];
 
   function getPanel() {
@@ -129,6 +130,21 @@
     showOnly([eventTab]);
   }
 
+  function showWildOnly() {
+    if (window.RBEditorWildPanel?.show) {
+      window.RBEditorWildPanel.show();
+      return;
+    }
+
+    const panel = clearPanel();
+    if (!panel) return;
+    setModeClass("mode-wild");
+    ensureTitle("野生宝可梦");
+    const body = document.createElement("div");
+    body.id = "wildPanel";
+    panel.appendChild(body);
+  }
+
   window.RBEditorRightPanel = {
     getPanel,
     clearPanel,
@@ -143,5 +159,6 @@
     showOnly,
     showMapInfoOnly,
     showEventsOnly,
+    showWildOnly,
   };
 })();
