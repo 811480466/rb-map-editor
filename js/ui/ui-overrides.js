@@ -168,6 +168,7 @@
         <button type="button" class="editor-mode-option" data-editor-mode="events">地图事件</button>
         <button type="button" class="editor-mode-option" data-editor-mode="connections">地图连接器</button>
         <button type="button" class="editor-mode-option" data-editor-mode="metadata">地图元数据</button>
+        <button type="button" class="editor-mode-option" data-editor-mode="wild">野生宝可梦</button>
       </div>`;
 
     const currentMapBar = document.querySelector(".current-map-bar");
