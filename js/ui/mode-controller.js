@@ -2,7 +2,7 @@
 // Unified editor mode and tab controller
 // ============================================================
 // 统一管理：
-// - 顶层编辑模式 terrain/events/connections/metadata
+// - 顶层编辑模式 terrain/events/connections/metadata/wild
 // - 鼠标模式 view/paint
 // - 地形子 tab tiles/collision
 // - 非地形模式右侧面板显示
@@ -128,7 +128,7 @@
   }
 
   function setEditorMode(mode) {
-    const nextMode = ["terrain", "events", "connections", "metadata"].includes(mode) ? mode : "terrain";
+    const nextMode = ["terrain", "events", "connections", "metadata", "wild"].includes(mode) ? mode : "terrain";
     state.mode = nextMode;
 
     document.querySelectorAll(".editor-mode-option").forEach(btn => {
@@ -163,7 +163,12 @@
     }
   }
 
+  function hideWildPanel() {
+    if (window.RBEditorWildPanel?.hide) window.RBEditorWildPanel.hide();
+  }
+
   function showEventsMode() {
+    hideWildPanel();
     setCenterMetadataVisible(false);
     hideTerrainPanel();
     setEventMarkersVisible(true);
@@ -184,6 +189,7 @@
   }
 
   function showMetadataMode() {
+    hideWildPanel();
     setEventMarkersVisible(false);
     hideTerrainPanel();
     removeCenterMetadataMapInfo();
@@ -203,6 +209,7 @@
   }
 
   function showTerrainMode() {
+    hideWildPanel();
     setEventMarkersVisible(false);
     setCenterMetadataVisible(false);
     removeCenterMetadataMapInfo();
@@ -214,6 +221,7 @@
   }
 
   function showConnectionsMode() {
+    hideWildPanel();
     setEventMarkersVisible(false);
     setCenterMetadataVisible(false);
     hideTerrainPanel();
@@ -228,6 +236,20 @@
     }
   }
 
+  function showWildMode() {
+    setEventMarkersVisible(false);
+    setCenterMetadataVisible(false);
+    hideTerrainPanel();
+    removeCenterMetadataMapInfo();
+    const legend = document.querySelector(".legend-bar");
+    if (legend) legend.style.display = "none";
+    if (window.RBEditorRightPanel?.showWildOnly) {
+      window.RBEditorRightPanel.showWildOnly();
+    } else if (window.RBEditorWildPanel?.show) {
+      window.RBEditorWildPanel.show();
+    }
+  }
+
   function applyModeState() {
     injectStyle();
     const mode = getCurrentMode();
@@ -239,6 +261,7 @@
     else if (mode === "events") showEventsMode();
     else if (mode === "metadata") showMetadataMode();
     else if (mode === "connections") showConnectionsMode();
+    else if (mode === "wild") showWildMode();
   }
 
   document.addEventListener("click", (e) => {
