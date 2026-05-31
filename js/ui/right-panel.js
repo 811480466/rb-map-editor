@@ -52,33 +52,6 @@
     return panel;
   }
 
-  function ensureEventsPanel() {
-    const panel = getPanel();
-    if (!panel) return null;
-
-    setModeClass("mode-events");
-    clearPanel();
-    ensureTitle("地图事件");
-
-    const eventTab = document.createElement("div");
-    eventTab.id = "eventTab";
-    eventTab.className = "tab-panel active";
-    eventTab.innerHTML = `
-      <div class="summary" id="eventSummary">
-        <div>OBJ: 0</div>
-        <div>TRAINER: 0</div>
-        <div>WARP: 0</div>
-        <div>BG/COORD: 0</div>
-      </div>
-      <div id="eventList"></div>
-      <h3>事件详情</h3>
-      <pre id="eventDetail">点击地图格子查看 blockId / behavior / collision；点击事件列表查看事件详情。</pre>
-      <div id="warpTools" class="warp-tools empty"></div>
-    `;
-    panel.appendChild(eventTab);
-    return eventTab;
-  }
-
   function ensureMapInfoPanel() {
     const panel = getPanel();
     if (!panel) return null;
@@ -148,7 +121,8 @@
   }
 
   function showEventsOnly() {
-    const eventTab = ensureEventsPanel();
+    const eventPanel = window.RBEditorEventPanel;
+    const eventTab = eventPanel?.ensurePanel ? eventPanel.ensurePanel() : document.getElementById("eventTab");
     if (typeof currentEvents !== "undefined" && typeof renderEventList === "function") {
       renderEventList(currentEvents);
     }
@@ -162,7 +136,6 @@
     ensureTitle,
     setTitle,
     setModeClass,
-    ensureEventsPanel,
     ensureMapInfoPanel,
     ensureConnectionToolsPanel,
     getDirectChild,
