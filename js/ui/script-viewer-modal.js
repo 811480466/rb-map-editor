@@ -77,12 +77,40 @@
 
       .script-viewer-tabs {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 12px 18px 0;
+        align-items: flex-end;
+        gap: 22px;
+        padding: 0 18px;
+        border-bottom: 1px solid #d7e4f5;
+        background: #fff;
       }
 
-      .script-viewer-tabs button,
+      .script-viewer-tabs button {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 12px 0 10px !important;
+        border: 0 !important;
+        border-bottom: 3px solid transparent !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        color: #4b6382 !important;
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        cursor: pointer;
+      }
+
+      .script-viewer-tabs button:hover {
+        color: #1f5fbf !important;
+      }
+
+      .script-viewer-tabs button.active {
+        color: #1f5fbf !important;
+        border-bottom-color: #1f5fbf !important;
+      }
+
       .script-viewer-action-btn,
       .script-viewer-open-btn {
         border: 1px solid #bfd1ec;
@@ -92,13 +120,6 @@
         padding: 6px 10px;
         font-size: 12px;
         cursor: pointer;
-      }
-
-      .script-viewer-tabs button.active {
-        background: #1f5fbf;
-        border-color: #1f5fbf;
-        color: #fff;
-        font-weight: 700;
       }
 
       .script-viewer-body {
