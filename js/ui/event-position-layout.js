@@ -1,7 +1,7 @@
 // ============================================================
 // Event position layout patch
 // ============================================================
-// 将事件详情里的“位置”区域从竖排 x/y/elevation 改成一行 X/Y/Z。
+// 将事件详情里的“位置”区域改成紧凑横排：x [ ] y [ ] z [ ]。
 // 只移动现有 input，不改 data-event-field，因此事件写回逻辑保持不变。
 
 (function eventPositionLayoutModule() {
@@ -11,27 +11,34 @@
     style.id = "eventPositionLayoutStyle";
     style.textContent = `
       .event-position-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        align-items: end;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
       }
 
       .event-position-field {
+        flex: 0 0 auto;
         min-width: 0;
-        display: flex;
-        flex-direction: column;
+        display: inline-flex;
+        align-items: center;
         gap: 4px;
       }
 
       .event-position-field span {
         font-size: 12px;
-        color: #566b88;
-        line-height: 1.2;
+        color: #172033;
+        line-height: 1;
+        text-transform: lowercase;
       }
 
       .event-position-field .event-edit-input {
-        width: 100%;
+        width: 66px;
+        min-width: 66px;
+        max-width: 66px;
+        height: 26px;
+        padding: 2px 4px;
+        font-size: 12px;
       }
     `;
     document.head.appendChild(style);
@@ -46,6 +53,13 @@
 
   function takeInput(section, fieldName) {
     return section.querySelector(`input[data-event-field="${fieldName}"]`);
+  }
+
+  function normalizeNumberInput(input, min, max) {
+    input.type = "number";
+    input.step = "1";
+    input.min = String(min);
+    input.max = String(max);
   }
 
   function makeField(label, input) {
@@ -70,14 +84,18 @@
     const z = takeInput(section, "elevation");
     if (!x || !y || !z) return;
 
+    normalizeNumberInput(x, -32768, 32767);
+    normalizeNumberInput(y, -32768, 32767);
+    normalizeNumberInput(z, 0, 255);
+
     const grid = section.querySelector(".event-field-grid");
     if (!grid) return;
 
     const xyz = document.createElement("div");
     xyz.className = "event-position-grid";
-    xyz.appendChild(makeField("X", x));
-    xyz.appendChild(makeField("Y", y));
-    xyz.appendChild(makeField("Z", z));
+    xyz.appendChild(makeField("x", x));
+    xyz.appendChild(makeField("y", y));
+    xyz.appendChild(makeField("z", z));
 
     grid.replaceChildren(xyz);
     section.dataset.xyzLayout = "1";
