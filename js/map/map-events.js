@@ -6,21 +6,21 @@ function parseObjectEvent(baseOff, index) {
 
   const localId = readU8(off + 0x00);
   const graphicsId = readU8(off + 0x01);
-  const kind = readU8(off + 0x02);
-  const movementType = readU8(off + 0x03);
+  const inConnection = readU8(off + 0x02);       // Leftover from FRLG
+  const padding03 = readU8(off + 0x03);          // 对齐 / 未使用
   const x = readS16(off + 0x04);
   const y = readS16(off + 0x06);
   const elevation = readU8(off + 0x08);
-  const movementRange = readU8(off + 0x09);
-  const movementRangeX = movementRange & 0x0F;
-  const movementRangeY = (movementRange >> 4) & 0x0F;
-  const unknownA = readU16(off + 0x0A);
+  const movementType = readU8(off + 0x09);
+  const movementRangeRaw = readU16(off + 0x0A);
+  const movementRangeX = movementRangeRaw & 0x0F;
+  const movementRangeY = (movementRangeRaw >> 4) & 0x0F;
   const trainerType = readU16(off + 0x0C);
   const trainerRange = readU16(off + 0x0E);
   const scriptPtr = readPtr(off + 0x10);
   const scriptOff = ptrToOffset(scriptPtr);
   const flagId = readU16(off + 0x14);
-  const unknown16 = readU16(off + 0x16);
+  const padding16 = readU16(off + 0x16);         // 结构对齐填充
 
   const trainerBattle = parseTrainerBattleScript(scriptOff);
 
@@ -31,20 +31,26 @@ function parseObjectEvent(baseOff, index) {
 
     localId,
     graphicsId,
-    kind,
-    movementType,
+    inConnection,
+    padding03,
     x,
     y,
     elevation,
+    movementType,
+    movementRangeRaw,
     movementRangeX,
     movementRangeY,
-    unknownA,
     trainerType,
     trainerRange,
     scriptPtr,
     scriptOff,
     flagId,
-    unknown16,
+    padding16,
+
+    // 兼容旧 UI 字段名：后续 UI 可逐步清理这些别名。
+    kind: inConnection,
+    unknownA: movementRangeRaw,
+    unknown16: padding16,
 
     trainerBattle,
   };
