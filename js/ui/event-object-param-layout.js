@@ -226,7 +226,7 @@
     appendPair(grid, makeRow("移动范围 Y", inputs.movementRangeY));
     appendPair(grid, makeRow("事件Flag", inputs.flagId));
     appendPair(grid, makeRow("训练家类型", inputs.trainerType));
-    appendPair(grid, makeRow("视野/树果/道具", inputs.trainerRange));
+    appendPair(grid, makeRow("视野/树果", inputs.trainerRange));
 
     const hidden = document.createElement("div");
     hidden.className = "event-object-hidden-fields";

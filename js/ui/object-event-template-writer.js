@@ -103,7 +103,7 @@
     const movementRangeX = parseNum(input.movementRangeX, "移动范围 X", 0, 0x0F);
     const movementRangeY = parseNum(input.movementRangeY, "移动范围 Y", 0, 0x0F);
     const trainerType = parseNum(input.trainerType, "训练家类型", 0, 0xFFFF);
-    const trainerRange = parseNum(input.trainerRange, "视野/树果/道具", 0, 0xFFFF);
+    const trainerRange = parseNum(input.trainerRange, "视野/树果", 0, 0xFFFF);
     const scriptPtr = parseNum(input.scriptPtr ?? ev.scriptPtr, "scriptPtr", 0, 0xFFFFFFFF);
     const flagId = parseNum(input.flagId, "事件Flag", 0, 0xFFFF);
     const padding16 = parseNum(input.padding16 ?? input.unknown16 ?? ev.padding16 ?? 0, "padding16", 0, 0xFFFF);
