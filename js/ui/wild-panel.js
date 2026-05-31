@@ -1,7 +1,7 @@
 // ============================================================
 // Wild Pokémon panel
 // ============================================================
-// 野生宝可梦模式：显示并编辑当前地图野生遭遇数据。
+// 野生宝可梦模式：显示、编辑、创建当前地图野生遭遇数据。
 // 宝可梦名称直接从 data/pokemon-data.js 的 window.RBEditorPokemonData 数组读取。
 
 (function wildPanelModule() {
@@ -33,7 +33,7 @@
       .wild-edit-status { color: #64748b; font-size: 12px; }
       .wild-edit-status.ok { color: #15803d; font-weight: 700; }
       .wild-edit-status.error { color: #dc2626; font-weight: 700; }
-      .wild-apply-btn { width: auto; margin: 0; padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; }
+      .wild-apply-btn, .wild-create-btn { width: auto; margin: 0; padding: 7px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; }
       .wild-table { width: 100%; border-collapse: separate; border-spacing: 0 7px; font-size: 12px; }
       .wild-table th { padding: 0 8px 4px; color: #64748b; font-weight: 800; text-align: left; white-space: nowrap; }
       .wild-table td { padding: 7px 8px; border-top: 1px solid #dbe7f6; border-bottom: 1px solid #dbe7f6; background: #fff; color: #172033; white-space: nowrap; vertical-align: middle; }
@@ -49,13 +49,24 @@
       .wild-right-row:last-child { border-bottom: 0; }
       .wild-right-label { color: #64748b; }
       .wild-right-value { color: #153b78; font-weight: 800; }
+      .wild-create-box { margin: 12px 16px 16px; padding: 14px; border: 1px dashed #b9d0ee; border-radius: 12px; background: #fbfdff; }
+      .wild-create-title { color: #153b78; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
+      .wild-create-desc { color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
+      .wild-create-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+      .wild-create-field { display: flex; flex-direction: column; gap: 4px; color: #24466f; font-size: 12px; }
+      .wild-create-field input { width: 100% !important; margin: 0 !important; padding: 5px 7px !important; box-sizing: border-box !important; }
+      .wild-create-checks { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 12px; color: #24466f; font-size: 12px; }
+      .wild-create-checks label { display: inline-flex; align-items: center; gap: 5px; }
+      .wild-create-status { min-height: 18px; color: #64748b; font-size: 12px; }
+      .wild-create-status.ok { color: #15803d; font-weight: 700; }
+      .wild-create-status.error { color: #dc2626; font-weight: 700; }
     `;
     document.head.appendChild(style);
   }
 
   function escapeText(value) {
     if (typeof escapeHtml === "function") return escapeHtml(value);
-    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
   }
 
   function normalizePokemonDataIfNeeded() {
@@ -114,10 +125,24 @@
     return found ? Number(found.id) : null;
   }
 
+  function parseNumberInput(value, fallback = 0) {
+    const text = String(value ?? "").trim();
+    if (!text) return fallback;
+    const n = /^0x/i.test(text) ? Number.parseInt(text, 16) : Number.parseInt(text, 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
   function setEditStatus(text, type = "") {
     const el = document.getElementById("wildEditStatus");
     if (!el) return;
     el.className = `wild-edit-status ${type}`.trim();
+    el.textContent = text;
+  }
+
+  function setCreateStatus(text, type = "") {
+    const el = document.getElementById("wildCreateStatus");
+    if (!el) return;
+    el.className = `wild-create-status ${type}`.trim();
     el.textContent = text;
   }
 
@@ -166,8 +191,77 @@
     }).join("");
   }
 
-  function renderEntriesTable(group) {
-    if (!group) return `<div class="wild-empty">当前地图没有这个类型的野生遭遇数据。</div>`;
+  function renderCreateBox(mode, groupKey = "") {
+    const title = mode === "map" ? "创建野生遭遇表" : `添加${GROUP_ORDER.find(g => g.key === groupKey)?.label || "遭遇类型"}`;
+    const desc = mode === "map"
+      ? "当前地图没有野生遭遇 Header。创建后会在空闲区写入 WildMonInfo / WildPokemon，并在原 Header 表末尾追加新记录。"
+      : "当前地图已有野生遭遇 Header，但这个类型为空。添加后会写入对应 WildMonInfo / WildPokemon，并更新当前 Header 指针。";
+    const freeStart = window.RBEditorWildEncounters?.WILD_FREE_SPACE_START ?? 0x01900000;
+
+    const checks = mode === "map"
+      ? `<div class="wild-create-checks">
+          ${GROUP_ORDER.map((g, i) => `<label><input type="checkbox" data-create-group="${g.key}" ${i === 0 ? "checked" : ""}>${g.label}</label>`).join("")}
+        </div>`
+      : `<input type="hidden" data-create-group="${groupKey}" checked>`;
+
+    return `
+      <div class="wild-create-box" data-create-mode="${mode}" data-create-kind="${groupKey}">
+        <div class="wild-create-title">${escapeText(title)}</div>
+        <div class="wild-create-desc">${escapeText(desc)}</div>
+        ${checks}
+        <div class="wild-create-grid">
+          <label class="wild-create-field">默认宝可梦 ID<input id="wildCreateSpecies" type="text" value="1"></label>
+          <label class="wild-create-field">最低等级<input id="wildCreateMinLevel" type="number" min="1" max="100" value="2"></label>
+          <label class="wild-create-field">最高等级<input id="wildCreateMaxLevel" type="number" min="1" max="100" value="2"></label>
+          <label class="wild-create-field">空闲区起始<input id="wildCreateFreeStart" type="text" value="${escapeText(typeof hex === "function" ? hex(freeStart) : `0x${freeStart.toString(16)}`)}"></label>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; justify-content:flex-end;">
+          <span id="wildCreateStatus" class="wild-create-status"></span>
+          <button id="createWildEncounterBtn" class="wild-create-btn" type="button">${escapeText(title)}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindCreateBox(mode, groupKey = "") {
+    const btn = document.getElementById("createWildEncounterBtn");
+    if (!btn || !currentMap) return;
+
+    btn.onclick = () => {
+      try {
+        const species = parseNumberInput(document.getElementById("wildCreateSpecies")?.value, 1);
+        const minLevel = parseNumberInput(document.getElementById("wildCreateMinLevel")?.value, 2);
+        const maxLevel = parseNumberInput(document.getElementById("wildCreateMaxLevel")?.value, minLevel);
+        const freeStart = parseNumberInput(document.getElementById("wildCreateFreeStart")?.value, window.RBEditorWildEncounters?.WILD_FREE_SPACE_START ?? 0x01900000);
+
+        if (mode === "map") {
+          const enabledGroups = Array.from(document.querySelectorAll("[data-create-group]:checked")).map(el => el.dataset.createGroup);
+          if (!enabledGroups.length) throw new Error("至少选择一种遭遇类型。 ");
+          window.RBEditorWildEncounters.createWildEncounterForMap(currentMap.mapGroup, currentMap.mapNum, {
+            enabledGroups,
+            freeStart,
+            defaultEntry: { species, minLevel, maxLevel },
+          });
+        } else {
+          window.RBEditorWildEncounters.addWildGroupToExistingHeader(currentMap.mapGroup, currentMap.mapNum, groupKey, {
+            freeStart,
+            defaultEntry: { species, minLevel, maxLevel },
+          });
+        }
+
+        setCreateStatus("已创建。导出 ROM 后生效。", "ok");
+        renderCenterPanel();
+        renderRightPanel();
+      } catch (err) {
+        setCreateStatus(err?.message || "创建失败", "error");
+      }
+    };
+  }
+
+  function renderEntriesTable(group, activeDef) {
+    if (!group) {
+      return renderCreateBox("group", activeDef?.key || activeGroupKey);
+    }
 
     const rows = group.entries.map(entry => `
       <tr data-entry-offset="${entry.offset}">
@@ -190,9 +284,7 @@
           </div>
         </div>
         <table class="wild-table">
-          <thead>
-            <tr><th>槽位</th><th>几率</th><th>最低等级</th><th>最高等级</th><th>宝可梦</th><th>偏移</th></tr>
-          </thead>
+          <thead><tr><th>槽位</th><th>几率</th><th>最低等级</th><th>最高等级</th><th>宝可梦</th><th>偏移</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -267,15 +359,22 @@
 
     const wild = getWildForCurrentMap();
     const mapName = typeof getMapDisplayNameWithCode === "function" ? getMapDisplayNameWithCode(currentMap) : "当前地图";
+
     if (!wild) {
-      centerPanel.innerHTML = `<div class="wild-empty">当前地图没有野生宝可梦数据：${escapeText(mapName)} / group=${escapeText(currentMap.mapGroup ?? "?")} map=${escapeText(currentMap.mapNum ?? "?")}</div>`;
+      centerPanel.innerHTML = `
+        <div class="wild-card">
+          <div class="wild-card-head">
+            <div><div class="wild-card-title">野生宝可梦</div><div class="wild-card-subtitle">${escapeText(mapName)} / group=${escapeText(currentMap.mapGroup ?? "?")} map=${escapeText(currentMap.mapNum ?? "?")}</div></div>
+            <div class="wild-card-subtitle">当前：无遭遇表</div>
+          </div>
+          ${renderCreateBox("map")}
+        </div>
+      `;
+      bindCreateBox("map");
       return centerPanel;
     }
 
-    if (!wild.groups?.[activeGroupKey]) {
-      const first = GROUP_ORDER.find(def => wild.groups?.[def.key]);
-      activeGroupKey = first?.key || "land";
-    }
+    if (!GROUP_ORDER.some(def => def.key === activeGroupKey)) activeGroupKey = "land";
 
     const activeGroup = wild.groups?.[activeGroupKey] || null;
     const activeDef = GROUP_ORDER.find(def => def.key === activeGroupKey) || GROUP_ORDER[0];
@@ -287,7 +386,7 @@
           <div class="wild-card-subtitle">当前：${escapeText(activeDef.label)}</div>
         </div>
         <div class="wild-tabs">${renderTabs(wild)}</div>
-        ${renderEntriesTable(activeGroup)}
+        ${renderEntriesTable(activeGroup, activeDef)}
       </div>
     `;
 
@@ -298,8 +397,13 @@
         renderRightPanel();
       };
     }
-    enhancePokemonDropdowns();
-    bindEditEvents(activeGroup);
+
+    if (activeGroup) {
+      enhancePokemonDropdowns();
+      bindEditEvents(activeGroup);
+    } else {
+      bindCreateBox("group", activeDef.key);
+    }
     return centerPanel;
   }
 
@@ -336,7 +440,7 @@
     }
     const rows = GROUP_ORDER.map(def => {
       const group = wild.groups?.[def.key];
-      const value = group ? `${group.encounterRate} / ${group.entries.length}` : "无";
+      const value = group ? `${group.encounterRate} / ${group.entries.length}` : "可添加";
       return `<div class="wild-right-row"><span class="wild-right-label">${def.label}</span><span class="wild-right-value">${escapeText(value)}</span></div>`;
     }).join("");
     body.innerHTML = `<div class="wild-right-card"><div class="wild-right-row"><span class="wild-right-label">当前地图</span><span class="wild-right-value">${escapeText(mapName)}</span></div><div class="wild-right-row"><span class="wild-right-label">Header</span><span class="wild-right-value">${escapeText(typeof hex === "function" ? hex(wild.headerOffset) : wild.headerOffset)}</span></div>${rows}</div>`;
