@@ -194,8 +194,17 @@ function formatCellForDisplay(info) {
 function showCellDetail(info) {
   selectedEventKey = null;
   for (const row of document.querySelectorAll(".event-row")) row.classList.remove("active");
-  document.getElementById("eventDetail").textContent = formatCellForDisplay(info);
-  renderWarpTools(null);
+
+  // 新事件面板规则：点击空白地图格子 = 取消事件选中，右侧回到事件列表。
+  // blockId / behavior / collision 继续通过鼠标 tooltip 查看。
+  if (window.RBEditorEventPanel?.clearSelectedEvent) {
+    window.RBEditorEventPanel.clearSelectedEvent();
+    return;
+  }
+
+  const eventDetail = document.getElementById("eventDetail");
+  if (eventDetail) eventDetail.textContent = formatCellForDisplay(info);
+  if (typeof renderWarpTools === "function") renderWarpTools(null);
 }
 
 canvas.addEventListener("click", (e) => {
