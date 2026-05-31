@@ -78,25 +78,39 @@ body,
 .connection-edge {
   border-color: #cfe0fb !important;
   background: rgba(255, 255, 255, .96) !important;
-  color: var(--blue-dark) !important;
 }
 
-.connection-edge:hover {
-  border-color: #93c5fd !important;
-  background: #e8f1ff !important;
-  color: var(--blue-dark) !important;
+/* 统一弹窗右上角关闭按钮，避免被通用 button 样式撑满 */
+.script-viewer-header {
+  align-items: flex-start !important;
 }
 
-.connection-edge.conn-ok,
-.connection-edge.conn-warn,
-.connection-edge.conn-bad {
-  border-color: #93c5fd !important;
-  background: #ffffff !important;
-  color: var(--blue-dark) !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, .08), 0 6px 18px rgba(15, 23, 42, .06);
+.script-viewer-header > div:first-child {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
 }
 
-.connection-edge-sub {
-  color: #64748b;
-  opacity: 1;
+.script-viewer-close {
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: #eef5ff !important;
+  color: #1f5fbf !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+}
+
+.script-viewer-close:hover {
+  background: #dfeeff !important;
 }
