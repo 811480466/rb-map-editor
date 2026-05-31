@@ -269,10 +269,10 @@
     if (!el) return;
     const c = countEvents(events || []);
     const items = [
-      ["object", `OBJ: ${c.object}`],
-      ["trainer", `TRAINER: ${c.trainer}`],
-      ["warp", `WARP: ${c.warp}`],
-      ["bgCoord", `BG/COORD: ${c.bg + c.coord}`],
+      ["object", `对象: ${c.object}`],
+      ["trainer", `训练家: ${c.trainer}`],
+      ["warp", `传送点: ${c.warp}`],
+      ["bgCoord", `事件: ${c.bg + c.coord}`],
     ];
 
     el.className = "event-summary-filter";
