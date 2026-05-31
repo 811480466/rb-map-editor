@@ -1,14 +1,16 @@
 // ============================================================
 // Wild Pokémon encounter parsing / writing / creation
 // ============================================================
-// 根据 ROM 中 0x00625D7C~0x0062863C 数据区和 Header 表解析每张地图的野生宝可梦。
+// 通过 0x00625DB0 处的 gWildMonHeaders 指针动态定位 Header 表。
+// 后续迁移 gWildMonHeaders 到新区域时，只要修改这个指针，读取逻辑无需再改。
 // 支持写回 WildPokemon：minLevel / maxLevel / species。
 // 支持给没有野生遭遇表的新地图创建默认遭遇表。
 
 (function wildEncountersModule() {
   const WILD_DATA_START = 0x00625D7C;
   const WILD_DATA_END = 0x0062863C;
-  const WILD_HEADER_TABLE_START = 0x0062863C;
+  const WILD_HEADER_TABLE_PTR_OFFSET = 0x00625DB0;
+  const WILD_HEADER_TABLE_SIZE_FALLBACK = 0x0062863C;
   const WILD_HEADER_SIZE = 0x14;
   const WILD_INFO_SIZE = 0x08;
   const WILD_MON_SIZE = 0x04;
@@ -25,6 +27,32 @@
 
   function getWildGroupDef(kind) {
     return WILD_GROUPS.find(g => g.key === kind) || null;
+  }
+
+  function getWildHeaderTablePtr() {
+    if (!isValidOffset(WILD_HEADER_TABLE_PTR_OFFSET, 4)) {
+      throw new Error(`gWildMonHeaders 指针位置无效：${hex(WILD_HEADER_TABLE_PTR_OFFSET)}`);
+    }
+    return readPtr(WILD_HEADER_TABLE_PTR_OFFSET);
+  }
+
+  function getWildHeaderTableStart() {
+    const ptr = getWildHeaderTablePtr();
+    const off = ptrToOffset(ptr);
+    if (off === null || !isValidOffset(off, WILD_HEADER_SIZE)) {
+      throw new Error(`gWildMonHeaders 指针无效：ptr=${hex(ptr)} ptrOff=${hex(WILD_HEADER_TABLE_PTR_OFFSET)}`);
+    }
+    return off;
+  }
+
+  function getWildHeaderTableInfo() {
+    const ptr = getWildHeaderTablePtr();
+    const off = getWildHeaderTableStart();
+    return {
+      ptrOffset: WILD_HEADER_TABLE_PTR_OFFSET,
+      ptr,
+      offset: off,
+    };
   }
 
   function parseWildPokemonEntry(off, slot, kind) {
@@ -67,7 +95,8 @@
   }
 
   function findWildHeaderTerminatorOffset() {
-    for (let off = WILD_HEADER_TABLE_START; isValidOffset(off, WILD_HEADER_SIZE); off += WILD_HEADER_SIZE) {
+    const start = getWildHeaderTableStart();
+    for (let off = start; isValidOffset(off, WILD_HEADER_SIZE); off += WILD_HEADER_SIZE) {
       const mapGroup = readU8(off + 0x00);
       const mapNum = readU8(off + 0x01);
       if (mapGroup === 0xFF && mapNum === 0xFF) return off;
@@ -77,7 +106,8 @@
 
   function loadWildEncounterHeaders() {
     const headers = [];
-    for (let off = WILD_HEADER_TABLE_START; isValidOffset(off, WILD_HEADER_SIZE); off += WILD_HEADER_SIZE) {
+    const start = getWildHeaderTableStart();
+    for (let off = start; isValidOffset(off, WILD_HEADER_SIZE); off += WILD_HEADER_SIZE) {
       const mapGroup = readU8(off + 0x00);
       const mapNum = readU8(off + 0x01);
       if (mapGroup === 0xFF && mapNum === 0xFF) break;
@@ -302,9 +332,13 @@
   window.RBEditorWildEncounters = {
     WILD_DATA_START,
     WILD_DATA_END,
-    WILD_HEADER_TABLE_START,
+    WILD_HEADER_TABLE_PTR_OFFSET,
+    WILD_HEADER_TABLE_SIZE_FALLBACK,
     WILD_FREE_SPACE_START,
     WILD_GROUPS,
+    getWildHeaderTablePtr,
+    getWildHeaderTableStart,
+    getWildHeaderTableInfo,
     loadWildEncounterHeaders,
     findWildEncounterForMap,
     findWildHeaderTerminatorOffset,
