@@ -13,12 +13,15 @@
       .event-position-grid {
         display: flex;
         align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
+        gap: 8px;
+        flex-wrap: nowrap;
+        width: 100%;
+        min-width: 0;
+        overflow: hidden;
       }
 
       .event-position-field {
-        flex: 0 0 auto;
+        flex: 0 1 33.333%;
         min-width: 0;
         display: inline-flex;
         align-items: center;
@@ -26,6 +29,7 @@
       }
 
       .event-position-field span {
+        flex: 0 0 auto;
         font-size: 12px;
         color: #172033;
         line-height: 1;
@@ -33,11 +37,12 @@
       }
 
       .event-position-field .event-edit-input {
-        width: 66px;
-        min-width: 66px;
-        max-width: 66px;
+        flex: 1 1 auto;
+        width: 54px;
+        min-width: 0;
+        max-width: 72px;
         height: 26px;
-        padding: 2px 4px;
+        padding: 2px 3px;
         font-size: 12px;
       }
     `;
