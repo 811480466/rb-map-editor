@@ -3,10 +3,13 @@
 // ============================================================
 // 普通全局脚本，不使用 import/export，直接通过 window.RBEditorSearchableDropdown 使用。
 // 用途：对象图形、野生宝可梦等单选搜索下拉。
+// 性能优化：默认不预渲染选项，只有展开时才渲染；无搜索时最多展示前 80 条。
 
 (function searchableDropdownModule() {
   let activeDropdown = null;
   let uid = 1;
+
+  const DEFAULT_RENDER_LIMIT = 80;
 
   function injectStyle() {
     if (document.getElementById("searchableDropdownStyle")) return;
@@ -19,11 +22,7 @@
         min-width: 0;
         box-sizing: border-box;
       }
-
-      .rb-searchable-dropdown-hidden {
-        display: none !important;
-      }
-
+      .rb-searchable-dropdown-hidden { display: none !important; }
       .rb-searchable-dropdown-trigger {
         width: 100%;
         height: 28px;
@@ -42,17 +41,14 @@
         box-sizing: border-box;
         cursor: pointer;
       }
-
       .rb-searchable-dropdown-trigger:hover {
         background: #f2f7ff;
         border-color: #b6cef0;
       }
-
       .rb-searchable-dropdown.open .rb-searchable-dropdown-trigger {
         border-color: #1f5fbf;
         box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.12);
       }
-
       .rb-searchable-dropdown-text {
         min-width: 0;
         flex: 1 1 auto;
@@ -61,13 +57,11 @@
         white-space: nowrap;
         text-align: left;
       }
-
       .rb-searchable-dropdown-arrow {
         flex: 0 0 auto;
         color: #64748b;
         font-size: 10px;
       }
-
       .rb-searchable-dropdown-menu {
         position: absolute;
         z-index: 5000;
@@ -81,11 +75,7 @@
         background: #fff;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
       }
-
-      .rb-searchable-dropdown.open .rb-searchable-dropdown-menu {
-        display: block;
-      }
-
+      .rb-searchable-dropdown.open .rb-searchable-dropdown-menu { display: block; }
       .rb-searchable-dropdown-search {
         width: 100% !important;
         height: 28px !important;
@@ -98,19 +88,16 @@
         font-size: 12px !important;
         box-sizing: border-box !important;
       }
-
       .rb-searchable-dropdown-search:focus {
         outline: none !important;
         border-color: #1f5fbf !important;
         box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.12) !important;
       }
-
       .rb-searchable-dropdown-options {
         max-height: 240px;
         overflow: auto;
         padding-right: 2px;
       }
-
       .rb-searchable-dropdown-option {
         display: flex;
         align-items: center;
@@ -123,11 +110,7 @@
         cursor: pointer;
         user-select: none;
       }
-
-      .rb-searchable-dropdown-option:hover {
-        background: #f4f8ff;
-      }
-
+      .rb-searchable-dropdown-option:hover { background: #f4f8ff; }
       .rb-searchable-dropdown-option input {
         width: 14px !important;
         height: 14px !important;
@@ -136,15 +119,14 @@
         accent-color: #1f8fe5;
         cursor: pointer;
       }
-
       .rb-searchable-dropdown-option-text {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-
-      .rb-searchable-dropdown-empty {
+      .rb-searchable-dropdown-empty,
+      .rb-searchable-dropdown-more {
         padding: 8px 2px;
         color: #64748b;
         font-size: 12px;
@@ -162,9 +144,7 @@
   }
 
   function closeActive(except = null) {
-    if (activeDropdown && activeDropdown !== except) {
-      activeDropdown.close();
-    }
+    if (activeDropdown && activeDropdown !== except) activeDropdown.close();
     activeDropdown = except;
   }
 
@@ -182,6 +162,7 @@
       this.fieldName = options.fieldName || "";
       this.hiddenClassName = options.hiddenClassName || "";
       this.extraClassName = options.className || "";
+      this.renderLimit = Number.isInteger(options.renderLimit) ? options.renderLimit : DEFAULT_RENDER_LIMIT;
       this.id = uid++;
       this.render();
     }
@@ -232,7 +213,7 @@
       this.container.appendChild(this.root);
 
       this.updateTrigger();
-      this.renderOptions("");
+      this.optionBox.innerHTML = "";
 
       this.trigger.addEventListener("click", (e) => {
         e.preventDefault();
@@ -259,7 +240,9 @@
     renderOptions(query = "") {
       if (!this.optionBox) return;
       const selected = this.valueToString(this.value);
-      const filtered = this.options.filter(item => this.matches(item, query));
+      const q = String(query || "").trim();
+      const filtered = this.options.filter(item => this.matches(item, q));
+      const shown = q ? filtered.slice(0, this.renderLimit) : filtered.slice(0, this.renderLimit);
       this.optionBox.innerHTML = "";
 
       if (!filtered.length) {
@@ -270,7 +253,7 @@
         return;
       }
 
-      for (const item of filtered) {
+      for (const item of shown) {
         const value = this.getValue(item);
         const label = document.createElement("label");
         label.className = "rb-searchable-dropdown-option";
@@ -292,13 +275,19 @@
         });
         this.optionBox.appendChild(label);
       }
+
+      if (filtered.length > shown.length) {
+        const more = document.createElement("div");
+        more.className = "rb-searchable-dropdown-more";
+        more.textContent = `还有 ${filtered.length - shown.length} 项，继续输入可缩小范围。`;
+        this.optionBox.appendChild(more);
+      }
     }
 
     select(value, item = null) {
       this.value = value;
       this.hidden.value = this.valueToString(value);
       this.updateTrigger();
-      this.renderOptions(this.search?.value || "");
       this.onChange(value, item);
       this.close();
     }
