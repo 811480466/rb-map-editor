@@ -2,7 +2,7 @@
 // Wild Pokémon panel
 // ============================================================
 // 野生宝可梦模式：中间区域显示当前地图野生遭遇数据，右侧显示摘要。
-// 宝可梦名称从 data/pokemon-data.js 的 window.RBEditorPokemonDataById 读取。
+// 宝可梦名称从 data/pokemon-data.js 的 window.RBEditorPokemonData 数组读取。
 // 不再 fetch JSON，确保 file:// 本地打开也能正常翻译。
 
 (function wildPanelModule() {
@@ -198,18 +198,32 @@
       .replace(/"/g, "&quot;");
   }
 
+  function buildPokemonMapFromData(data) {
+    if (data instanceof Map) return data;
+
+    if (Array.isArray(data)) {
+      return new Map(
+        data
+          .filter(item => item && Number.isInteger(Number(item.id)))
+          .map(item => [Number(item.id), item])
+      );
+    }
+
+    if (data && typeof data === "object") {
+      return new Map(
+        Object.entries(data).map(([id, item]) => [Number(item?.id ?? id), item])
+      );
+    }
+
+    return new Map();
+  }
+
   function getPokemonMap() {
     if (window.RBEditorPokemonDataById instanceof Map) {
       return window.RBEditorPokemonDataById;
     }
 
-    if (window.RBEditorPokemonData && typeof window.RBEditorPokemonData === "object") {
-      return new Map(
-        Object.entries(window.RBEditorPokemonData).map(([id, item]) => [Number(id), item])
-      );
-    }
-
-    return new Map();
+    return buildPokemonMapFromData(window.RBEditorPokemonData);
   }
 
   function getPokemonById(speciesId) {
@@ -443,6 +457,7 @@
     renderCenterPanel,
     renderRightPanel,
     getPokemonById,
+    buildPokemonMapFromData,
     show,
     hide,
   };
