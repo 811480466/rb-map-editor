@@ -25,14 +25,32 @@
         color: #163c7a;
       }
 
-      .event-filter-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+      .event-summary-filter {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
         margin: 8px 0 12px;
       }
 
-      .event-filter-tabs button,
+      .event-summary-filter button {
+        min-width: 0;
+        border: 1px solid #bfd1ec;
+        background: #f7fbff;
+        color: #16447d;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .event-summary-filter button.active {
+        background: #1f5fbf;
+        border-color: #1f5fbf;
+        color: #fff;
+        font-weight: 700;
+      }
+
       .event-back-btn,
       .event-secondary-btn {
         border: 1px solid #bfd1ec;
@@ -42,12 +60,6 @@
         padding: 5px 9px;
         font-size: 12px;
         cursor: pointer;
-      }
-
-      .event-filter-tabs button.active {
-        background: #1f5fbf;
-        border-color: #1f5fbf;
-        color: #fff;
       }
 
       .event-detail-head {
@@ -200,34 +212,41 @@
     return events.filter(e => e.type === eventTypeFilter);
   }
 
+  function toggleFilter(key, events) {
+    eventTypeFilter = eventTypeFilter === key ? "all" : key;
+    renderListView(events || []);
+  }
+
   function renderEventSummary(events) {
     const el = document.getElementById("eventSummary");
     if (!el) return;
     const c = countEvents(events || []);
-    el.innerHTML = `
-      <div>OBJ: ${c.object}</div>
-      <div>TRAINER: ${c.trainer}</div>
-      <div>WARP: ${c.warp}</div>
-      <div>BG/COORD: ${c.bg + c.coord}</div>
-    `;
-  }
-
-  function renderFilterTabs(events) {
-    const c = countEvents(events || []);
     const items = [
-      ["all", `全部 ${c.all}`],
-      ["object", `OBJ ${c.object}`],
-      ["trainer", `TRAINER ${c.trainer}`],
-      ["warp", `WARP ${c.warp}`],
-      ["bg", `BG ${c.bg}`],
-      ["coord", `COORD ${c.coord}`],
+      ["object", `OBJ: ${c.object}`],
+      ["trainer", `TRAINER: ${c.trainer}`],
+      ["warp", `WARP: ${c.warp}`],
+      ["bgCoord", `BG/COORD: ${c.bg + c.coord}`],
     ];
 
-    return `
-      <div class="event-filter-tabs" id="eventFilterTabs">
-        ${items.map(([key, label]) => `<button type="button" data-event-filter="${key}" class="${eventTypeFilter === key ? "active" : ""}">${label}</button>`).join("")}
-      </div>
-    `;
+    el.className = "event-summary-filter";
+    el.innerHTML = items.map(([key, label]) => {
+      const active = key === "bgCoord"
+        ? (eventTypeFilter === "bg" || eventTypeFilter === "coord")
+        : eventTypeFilter === key;
+      return `<button type="button" data-event-summary-filter="${key}" class="${active ? "active" : ""}">${escapeHtml(label)}</button>`;
+    }).join("");
+
+    for (const btn of el.querySelectorAll("button[data-event-summary-filter]")) {
+      btn.onclick = () => {
+        const key = btn.dataset.eventSummaryFilter;
+        if (key === "bgCoord") {
+          eventTypeFilter = (eventTypeFilter === "bg" || eventTypeFilter === "coord") ? "all" : "bg";
+          renderListView(events || []);
+          return;
+        }
+        toggleFilter(key, events);
+      };
+    }
   }
 
   function eventRowHtml(ev) {
@@ -273,8 +292,7 @@
       <div class="event-panel-header">
         <div class="event-panel-title">事件列表</div>
       </div>
-      <div class="summary" id="eventSummary"></div>
-      ${renderFilterTabs(events)}
+      <div id="eventSummary"></div>
       <div id="eventList"></div>
     `;
 
@@ -293,13 +311,6 @@
         row.onclick = () => showEventDetail(ev);
         list.appendChild(row);
       }
-    }
-
-    for (const btn of eventTab.querySelectorAll("button[data-event-filter]")) {
-      btn.onclick = () => {
-        eventTypeFilter = btn.dataset.eventFilter || "all";
-        renderListView(events);
-      };
     }
   }
 
