@@ -1,22 +1,32 @@
 // ============================================================
 // Wild Pokémon name fallback
 // ============================================================
-// wild-panel.js 内部会尝试 fetch json/pokemon.json。
-// 但如果用户直接用 file:// 打开 index.html，浏览器可能会拦截 fetch。
-// 这个脚本作为后处理兜底：扫描表格中的 #SpeciesID，替换成中文宝可梦名称。
+// 使用 data/pokemon-data.js 里的 window.RBEditorPokemonDataById 翻译 Species ID。
+// 不依赖 fetch，所以直接用 file:// 打开 index.html 也能显示中文宝可梦名。
 
 (function wildPokemonNameFallbackModule() {
   const FALLBACK_POKEMON = {
-    270: { code: "Lotad", name: "莲叶童子" },
-    283: { code: "Surskit", name: "溜溜糖球" },
-    422: { code: "Shellos", name: "无壳海兔" },
-    453: { code: "Croagunk", name: "不良蛙" },
-    535: { code: "Tympole", name: "圆蝌蚪" },
-    1062: { code: "Shellos", name: "无壳海兔-南海" },
+    270: { id: 270, code: "Lotad", name: "莲叶童子" },
+    283: { id: 283, code: "Surskit", name: "溜溜糖球" },
+    422: { id: 422, code: "Shellos", name: "无壳海兔" },
+    453: { id: 453, code: "Croagunk", name: "不良蛙" },
+    535: { id: 535, code: "Tympole", name: "圆蝌蚪" },
+    1062: { id: 1062, code: "Shellos", name: "无壳海兔-南海" },
   };
 
-  let pokemonMap = new Map(Object.entries(FALLBACK_POKEMON).map(([id, item]) => [Number(id), item]));
-  let loadStarted = false;
+  function getPokemonMap() {
+    if (window.RBEditorPokemonDataById instanceof Map) {
+      return window.RBEditorPokemonDataById;
+    }
+
+    if (window.RBEditorPokemonData && typeof window.RBEditorPokemonData === "object") {
+      return new Map(
+        Object.entries(window.RBEditorPokemonData).map(([id, item]) => [Number(id), item])
+      );
+    }
+
+    return new Map(Object.entries(FALLBACK_POKEMON).map(([id, item]) => [Number(id), item]));
+  }
 
   function escapeText(value) {
     return String(value ?? "")
@@ -24,25 +34,6 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  async function loadPokemonJson() {
-    if (loadStarted) return;
-    loadStarted = true;
-    try {
-      const res = await fetch("json/pokemon.json", { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const list = await res.json();
-      if (!Array.isArray(list)) return;
-      for (const item of list) {
-        const id = Number(item.id);
-        if (Number.isInteger(id)) pokemonMap.set(id, item);
-      }
-      translateWildPokemonCells();
-    } catch (err) {
-      // file:// 打开页面时经常会进这里；保留内置兜底映射即可。
-      translateWildPokemonCells();
-    }
   }
 
   function parseSpeciesIdFromText(text) {
@@ -60,11 +51,13 @@
     const center = document.getElementById("wildCenterPanel");
     if (!center) return;
 
+    const pokemonMap = getPokemonMap();
+
     for (const el of center.querySelectorAll(".wild-pokemon-name")) {
       if (el.dataset.translated === "1") continue;
       const id = parseSpeciesIdFromText(el.textContent);
       if (!id) continue;
-      const item = pokemonMap.get(id);
+      const item = pokemonMap.get(id) || FALLBACK_POKEMON[id];
       if (!item) continue;
       const td = el.closest("td");
       if (!td) continue;
@@ -75,7 +68,6 @@
   const observer = new MutationObserver(() => translateWildPokemonCells());
 
   function install() {
-    loadPokemonJson();
     translateWildPokemonCells();
     observer.observe(document.body, { childList: true, subtree: true });
   }
@@ -84,7 +76,7 @@
   else install();
 
   window.RBEditorWildPokemonNameFallback = {
-    loadPokemonJson,
     translateWildPokemonCells,
+    getPokemonMap,
   };
 })();
