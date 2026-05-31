@@ -52,14 +52,28 @@
       }
 
       .event-back-btn,
-      .event-secondary-btn {
+      .event-secondary-btn,
+      .event-primary-btn {
         border: 1px solid #bfd1ec;
         background: #f7fbff;
         color: #16447d;
         border-radius: 7px;
-        padding: 5px 9px;
+        padding: 6px 10px;
         font-size: 12px;
         cursor: pointer;
+      }
+
+      .event-primary-btn {
+        background: #1f5fbf;
+        border-color: #1f5fbf;
+        color: #fff;
+        font-weight: 700;
+      }
+
+      .event-primary-btn:disabled,
+      .event-secondary-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
       }
 
       .event-detail-head {
@@ -110,7 +124,8 @@
       }
 
       .event-field-value,
-      .event-readonly-input {
+      .event-readonly-input,
+      .event-edit-input {
         min-width: 0;
         border: 1px solid #cbd9ed;
         border-radius: 6px;
@@ -119,12 +134,43 @@
         padding: 5px 7px;
         font-size: 12px;
         font-family: Consolas, Monaco, monospace;
+        box-sizing: border-box;
+        width: 100%;
+      }
+
+      .event-edit-input:focus {
+        outline: none;
+        border-color: #1f5fbf;
+        box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.12);
       }
 
       .event-field-value.readonly {
         border-color: transparent;
         background: transparent;
         padding-left: 0;
+      }
+
+      .event-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0;
+      }
+
+      .event-edit-status {
+        min-height: 18px;
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: #566b88;
+        white-space: pre-wrap;
+      }
+
+      .event-edit-status.ok {
+        color: #15803d;
+      }
+
+      .event-edit-status.error {
+        color: #dc2626;
       }
 
       .event-warp-status {
@@ -209,6 +255,7 @@
     if (eventTypeFilter === "all") return events;
     if (eventTypeFilter === "trainer") return events.filter(e => e.type === "object" && e.trainerBattle);
     if (eventTypeFilter === "object") return events.filter(e => e.type === "object");
+    if (eventTypeFilter === "bgCoord") return events.filter(e => e.type === "bg" || e.type === "coord");
     return events.filter(e => e.type === eventTypeFilter);
   }
 
@@ -230,22 +277,12 @@
 
     el.className = "event-summary-filter";
     el.innerHTML = items.map(([key, label]) => {
-      const active = key === "bgCoord"
-        ? (eventTypeFilter === "bg" || eventTypeFilter === "coord")
-        : eventTypeFilter === key;
+      const active = eventTypeFilter === key;
       return `<button type="button" data-event-summary-filter="${key}" class="${active ? "active" : ""}">${escapeHtml(label)}</button>`;
     }).join("");
 
     for (const btn of el.querySelectorAll("button[data-event-summary-filter]")) {
-      btn.onclick = () => {
-        const key = btn.dataset.eventSummaryFilter;
-        if (key === "bgCoord") {
-          eventTypeFilter = (eventTypeFilter === "bg" || eventTypeFilter === "coord") ? "all" : "bg";
-          renderListView(events || []);
-          return;
-        }
-        toggleFilter(key, events);
-      };
+      btn.onclick = () => toggleFilter(btn.dataset.eventSummaryFilter || "all", events);
     }
   }
 
@@ -314,11 +351,20 @@
     }
   }
 
-  function field(label, value, options = {}) {
+  function field(label, value) {
     const text = value === null || value === undefined ? "" : String(value);
     return `
       <div class="event-field-label">${escapeHtml(label)}</div>
-      <div class="event-field-value ${options.readonly === false ? "" : "readonly"}">${escapeHtml(text)}</div>
+      <div class="event-field-value readonly">${escapeHtml(text)}</div>
+    `;
+  }
+
+  function inputField(label, name, value, options = {}) {
+    const text = value === null || value === undefined ? "" : String(value);
+    const hint = options.hint ? ` title="${escapeHtml(options.hint)}"` : "";
+    return `
+      <div class="event-field-label">${escapeHtml(label)}</div>
+      <input class="event-edit-input" data-event-field="${escapeHtml(name)}" value="${escapeHtml(text)}"${hint} />
     `;
   }
 
@@ -331,21 +377,28 @@
     `;
   }
 
+  function renderPositionFields(ev) {
+    let body = "";
+    body += inputField("x", "x", ev.x, { hint: "s16" });
+    body += inputField("y", "y", ev.y, { hint: "s16" });
+    body += inputField("elevation", "elevation", ev.elevation, { hint: "u8" });
+    return section("位置", body);
+  }
+
   function renderObjectFields(ev) {
     let body = "";
-    body += field("localId", ev.localId);
-    body += field("graphicsId", `${ev.graphicsId} / ${hex(ev.graphicsId, 2)}`);
-    body += field("kind", ev.kind);
-    body += field("movementType", ev.movementType);
-    body += field("moveRangeX", ev.movementRangeX);
-    body += field("moveRangeY", ev.movementRangeY);
-    body += field("unknownA", `${ev.unknownA} / ${hex(ev.unknownA, 4)}`);
-    body += field("trainerType", ev.trainerType);
-    body += field("trainerRange", ev.trainerRange);
-    body += field("flagId", `${ev.flagId} / ${hex(ev.flagId, 4)}`);
-    body += field("unknown16", `${ev.unknown16} / ${hex(ev.unknown16, 4)}`);
-    body += field("scriptPtr", hex(ev.scriptPtr));
-    body += field("scriptOff", ev.scriptOff !== null ? hex(ev.scriptOff) : "null");
+    body += inputField("localId", "localId", ev.localId, { hint: "u8" });
+    body += inputField("graphicsId", "graphicsId", ev.graphicsId, { hint: "u8，可填十进制或 0xXX" });
+    body += inputField("kind", "kind", ev.kind, { hint: "u8" });
+    body += inputField("movementType", "movementType", ev.movementType, { hint: "u8" });
+    body += inputField("moveRangeX", "movementRangeX", ev.movementRangeX, { hint: "0-15" });
+    body += inputField("moveRangeY", "movementRangeY", ev.movementRangeY, { hint: "0-15" });
+    body += inputField("unknownA", "unknownA", hex(ev.unknownA, 4), { hint: "u16" });
+    body += inputField("trainerType", "trainerType", ev.trainerType, { hint: "u16" });
+    body += inputField("trainerRange", "trainerRange", ev.trainerRange, { hint: "u16" });
+    body += inputField("scriptPtr", "scriptPtr", hex(ev.scriptPtr), { hint: "GBA ptr，例如 0x08210C46" });
+    body += inputField("flagId", "flagId", ev.flagId, { hint: "u16" });
+    body += inputField("unknown16", "unknown16", hex(ev.unknown16, 4), { hint: "u16" });
 
     if (ev.trainerBattle) {
       body += field("trainerId", ev.trainerBattle.trainerId);
@@ -357,9 +410,9 @@
 
   function renderWarpFields(ev) {
     let body = "";
-    body += field("mapGroup", ev.mapGroup);
-    body += field("mapNum", ev.mapNum);
-    body += field("warpId", ev.warpId);
+    body += inputField("mapGroup", "mapGroup", ev.mapGroup, { hint: "u8" });
+    body += inputField("mapNum", "mapNum", ev.mapNum, { hint: "u8" });
+    body += inputField("warpId", "warpId", ev.warpId, { hint: "u8" });
     return section("WARP 目标", body) + renderWarpCheck(ev);
   }
 
@@ -399,18 +452,18 @@
 
   function renderBgFields(ev) {
     let body = "";
-    body += field("kind", ev.kind);
-    body += field("data0", `${ev.data0} / ${hex(ev.data0, 4)}`);
-    body += field("scriptPtr", hex(ev.scriptPtr));
+    body += inputField("kind", "kind", ev.kind, { hint: "u8" });
+    body += inputField("data0", "data0", hex(ev.data0, 4), { hint: "u16" });
+    body += inputField("scriptPtr", "scriptPtr", hex(ev.scriptPtr), { hint: "GBA ptr" });
     body += field("scriptOff", ev.scriptOff !== null ? hex(ev.scriptOff) : "null");
     return section("BG 参数", body);
   }
 
   function renderCoordFields(ev) {
     let body = "";
-    body += field("trigger", `${ev.trigger} / ${hex(ev.trigger, 4)}`);
-    body += field("indexValue", `${ev.indexValue} / ${hex(ev.indexValue, 4)}`);
-    body += field("scriptPtr", hex(ev.scriptPtr));
+    body += inputField("trigger", "trigger", hex(ev.trigger, 4), { hint: "u16" });
+    body += inputField("indexValue", "indexValue", hex(ev.indexValue, 4), { hint: "u16" });
+    body += inputField("scriptPtr", "scriptPtr", hex(ev.scriptPtr), { hint: "GBA ptr" });
     body += field("scriptOff", ev.scriptOff !== null ? hex(ev.scriptOff) : "null");
     return section("COORD 参数", body);
   }
@@ -433,9 +486,6 @@
     basic += field("type", eventTypeLabel(ev));
     basic += field("index", `#${ev.index}`);
     basic += field("offset", hex(ev.offset));
-    basic += field("x", ev.x);
-    basic += field("y", ev.y);
-    basic += field("elevation", ev.elevation);
 
     eventTab.innerHTML = `
       <div class="event-detail-head">
@@ -443,10 +493,16 @@
           <div class="event-detail-title">${escapeHtml(title)}</div>
           <button id="eventBackToListBtn" class="event-back-btn" type="button">← 返回事件列表</button>
         </div>
-        <div class="small">当前是只读属性页；下一步再加“应用修改”。</div>
+        <div class="small">修改后点击“应用修改”，会直接写入当前内存中的 ROM；最后仍需要点页面左上角“导出”。</div>
       </div>
       ${section("基础信息", basic)}
+      ${renderPositionFields(ev)}
       ${renderTypeFields(ev)}
+      <div class="event-actions">
+        <button id="applyEventEditBtn" class="event-primary-btn" type="button">应用修改</button>
+        <button id="resetEventEditBtn" class="event-secondary-btn" type="button">撤销修改</button>
+      </div>
+      <div id="eventEditStatus" class="event-edit-status"></div>
       <details class="event-debug">
         <summary>调试 JSON</summary>
         <pre id="eventDetail">${escapeHtml(JSON.stringify(formatEventForDisplay(ev), null, 2))}</pre>
@@ -455,10 +511,206 @@
     `;
 
     document.getElementById("eventBackToListBtn")?.addEventListener("click", clearSelectedEvent);
+    document.getElementById("applyEventEditBtn")?.addEventListener("click", () => applyEventEdit(ev));
+    document.getElementById("resetEventEditBtn")?.addEventListener("click", () => renderDetailView(ev));
+
+    for (const input of eventTab.querySelectorAll(".event-edit-input")) {
+      input.addEventListener("input", () => setEditStatus("未应用修改。", ""));
+    }
+
     const jumpBtn = document.getElementById("jumpWarpTargetBtn");
     const jumpFocusBtn = document.getElementById("jumpWarpTargetFocusBtn");
     if (jumpBtn) jumpBtn.onclick = () => jumpToWarpTarget(ev, false);
     if (jumpFocusBtn) jumpFocusBtn.onclick = () => jumpToWarpTarget(ev, true);
+  }
+
+  function setEditStatus(text, cls = "") {
+    const el = document.getElementById("eventEditStatus");
+    if (!el) return;
+    el.className = `event-edit-status ${cls}`.trim();
+    el.textContent = text || "";
+  }
+
+  function parseNum(raw, name, min, max) {
+    const text = String(raw ?? "").trim();
+    if (!text) throw new Error(`${name} 不能为空`);
+    const value = /^[-+]?0x/i.test(text) ? Number.parseInt(text, 16) : Number(text);
+    if (!Number.isInteger(value)) throw new Error(`${name} 必须是整数`);
+    if (value < min || value > max) throw new Error(`${name} 超出范围：${min} ~ ${max}`);
+    return value;
+  }
+
+  function getInputMap() {
+    const map = {};
+    for (const input of document.querySelectorAll("[data-event-field]")) {
+      map[input.dataset.eventField] = input.value;
+    }
+    return map;
+  }
+
+  function collectCommonValues(input) {
+    return {
+      x: parseNum(input.x, "x", -32768, 32767),
+      y: parseNum(input.y, "y", -32768, 32767),
+      elevation: parseNum(input.elevation, "elevation", 0, 0xFF),
+    };
+  }
+
+  function collectEventValues(ev) {
+    const input = getInputMap();
+    const values = collectCommonValues(input);
+
+    if (ev.type === "object") {
+      values.localId = parseNum(input.localId, "localId", 0, 0xFF);
+      values.graphicsId = parseNum(input.graphicsId, "graphicsId", 0, 0xFF);
+      values.kind = parseNum(input.kind, "kind", 0, 0xFF);
+      values.movementType = parseNum(input.movementType, "movementType", 0, 0xFF);
+      values.movementRangeX = parseNum(input.movementRangeX, "moveRangeX", 0, 0x0F);
+      values.movementRangeY = parseNum(input.movementRangeY, "moveRangeY", 0, 0x0F);
+      values.unknownA = parseNum(input.unknownA, "unknownA", 0, 0xFFFF);
+      values.trainerType = parseNum(input.trainerType, "trainerType", 0, 0xFFFF);
+      values.trainerRange = parseNum(input.trainerRange, "trainerRange", 0, 0xFFFF);
+      values.scriptPtr = parseNum(input.scriptPtr, "scriptPtr", 0, 0xFFFFFFFF);
+      values.flagId = parseNum(input.flagId, "flagId", 0, 0xFFFF);
+      values.unknown16 = parseNum(input.unknown16, "unknown16", 0, 0xFFFF);
+    } else if (ev.type === "warp") {
+      values.warpId = parseNum(input.warpId, "warpId", 0, 0xFF);
+      values.mapNum = parseNum(input.mapNum, "mapNum", 0, 0xFF);
+      values.mapGroup = parseNum(input.mapGroup, "mapGroup", 0, 0xFF);
+    } else if (ev.type === "bg") {
+      values.kind = parseNum(input.kind, "kind", 0, 0xFF);
+      values.data0 = parseNum(input.data0, "data0", 0, 0xFFFF);
+      values.scriptPtr = parseNum(input.scriptPtr, "scriptPtr", 0, 0xFFFFFFFF);
+    } else if (ev.type === "coord") {
+      values.trigger = parseNum(input.trigger, "trigger", 0, 0xFFFF);
+      values.indexValue = parseNum(input.indexValue, "indexValue", 0, 0xFFFF);
+      values.scriptPtr = parseNum(input.scriptPtr, "scriptPtr", 0, 0xFFFFFFFF);
+    }
+
+    return values;
+  }
+
+  function ensureWriteRange(off, size) {
+    if (!rom || !isValidOffset(off, size)) {
+      throw new Error(`ROM 写入范围无效：${hex(off)} size=${size}`);
+    }
+  }
+
+  function writeByte(off, value) {
+    ensureWriteRange(off, 1);
+    rom[off] = value & 0xFF;
+  }
+
+  function writeWord(off, value) {
+    ensureWriteRange(off, 2);
+    rom[off] = value & 0xFF;
+    rom[off + 1] = (value >> 8) & 0xFF;
+  }
+
+  function writeDword(off, value) {
+    ensureWriteRange(off, 4);
+    const v = value >>> 0;
+    rom[off] = v & 0xFF;
+    rom[off + 1] = (v >> 8) & 0xFF;
+    rom[off + 2] = (v >> 16) & 0xFF;
+    rom[off + 3] = (v >> 24) & 0xFF;
+  }
+
+  function writeS16(off, value) {
+    writeWord(off, value < 0 ? value + 0x10000 : value);
+  }
+
+  function writeCommonEventFields(ev, values) {
+    writeS16(ev.offset + 0x00, values.x);
+    writeS16(ev.offset + 0x02, values.y);
+    writeByte(ev.offset + 0x04, values.elevation);
+  }
+
+  function writeObjectEvent(ev, values) {
+    ensureWriteRange(ev.offset, 0x18);
+    writeByte(ev.offset + 0x00, values.localId);
+    writeByte(ev.offset + 0x01, values.graphicsId);
+    writeByte(ev.offset + 0x02, values.kind);
+    writeByte(ev.offset + 0x03, values.movementType);
+    writeS16(ev.offset + 0x04, values.x);
+    writeS16(ev.offset + 0x06, values.y);
+    writeByte(ev.offset + 0x08, values.elevation);
+    writeByte(ev.offset + 0x09, (values.movementRangeX & 0x0F) | ((values.movementRangeY & 0x0F) << 4));
+    writeWord(ev.offset + 0x0A, values.unknownA);
+    writeWord(ev.offset + 0x0C, values.trainerType);
+    writeWord(ev.offset + 0x0E, values.trainerRange);
+    writeDword(ev.offset + 0x10, values.scriptPtr);
+    writeWord(ev.offset + 0x14, values.flagId);
+    writeWord(ev.offset + 0x16, values.unknown16);
+  }
+
+  function writeWarpEvent(ev, values) {
+    ensureWriteRange(ev.offset, 0x08);
+    writeCommonEventFields(ev, values);
+    writeByte(ev.offset + 0x05, values.warpId);
+    writeByte(ev.offset + 0x06, values.mapNum);
+    writeByte(ev.offset + 0x07, values.mapGroup);
+  }
+
+  function writeBgEvent(ev, values) {
+    ensureWriteRange(ev.offset, 0x0C);
+    writeCommonEventFields(ev, values);
+    writeByte(ev.offset + 0x05, values.kind);
+    writeWord(ev.offset + 0x06, values.data0);
+    writeDword(ev.offset + 0x08, values.scriptPtr);
+  }
+
+  function writeCoordEvent(ev, values) {
+    ensureWriteRange(ev.offset, 0x10);
+    writeCommonEventFields(ev, values);
+    writeWord(ev.offset + 0x06, values.trigger);
+    writeWord(ev.offset + 0x08, values.indexValue);
+    writeDword(ev.offset + 0x0C, values.scriptPtr);
+  }
+
+  function writeEventToRom(ev, values) {
+    if (ev.type === "object") writeObjectEvent(ev, values);
+    else if (ev.type === "warp") writeWarpEvent(ev, values);
+    else if (ev.type === "bg") writeBgEvent(ev, values);
+    else if (ev.type === "coord") writeCoordEvent(ev, values);
+    else throw new Error(`未知事件类型：${ev.type}`);
+  }
+
+  function findEventAfterReload(oldKey) {
+    if (!Array.isArray(currentEvents)) return null;
+    return currentEvents.find(e => eventKey(e) === oldKey) || null;
+  }
+
+  function refreshAfterWrite(oldKey) {
+    if (currentMap && typeof loadMapEvents === "function") {
+      currentEvents = loadMapEvents(currentMap);
+    }
+
+    if (currentMap && typeof renderMap === "function") {
+      renderMap(currentMap, currentEvents);
+    }
+
+    const next = findEventAfterReload(oldKey);
+    if (next) {
+      selectedEventKey = eventKey(next);
+      renderDetailView(next);
+      setEditStatus("已应用修改。点击左上角“导出”保存到文件。", "ok");
+    } else {
+      selectedEventKey = null;
+      renderListView(currentEvents || []);
+    }
+  }
+
+  function applyEventEdit(ev) {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。无法写入。“应用修改”只修改内存中的 ROM，最后仍需导出文件。");
+      const key = eventKey(ev);
+      const values = collectEventValues(ev);
+      writeEventToRom(ev, values);
+      refreshAfterWrite(key);
+    } catch (err) {
+      setEditStatus(err?.message || String(err), "error");
+    }
   }
 
   function showEventDetail(ev) {
@@ -555,6 +807,7 @@
     showEventDetail,
     clearSelectedEvent,
     renderEventSummary,
+    applyEventEdit,
   };
 
   window.eventBadge = eventBadge;
