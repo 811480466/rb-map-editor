@@ -1,7 +1,7 @@
 // ============================================================
 // Object graphics searchable dropdown
 // ============================================================
-// 将对象事件参数里的 graphicsId 输入框改成“输入搜索 + 下拉勾选列表”。
+// 将对象事件参数里的 graphicsId 字段改成“输入搜索 + 下拉勾选列表”。
 // 数据来自 data/object-event-graphics-data.js。
 // 隐藏 input 保留 data-event-field="graphicsId"，应用修改逻辑可直接读取数字并写回。
 
@@ -19,11 +19,7 @@
         min-width: 0;
         box-sizing: border-box;
       }
-
-      #eventTab .object-graphics-hidden-input {
-        display: none !important;
-      }
-
+      #eventTab .object-graphics-hidden-input { display: none !important; }
       #eventTab .object-graphics-trigger {
         width: 100%;
         height: 28px;
@@ -42,12 +38,10 @@
         box-sizing: border-box;
         cursor: pointer;
       }
-
       #eventTab .object-graphics-trigger:hover {
         background: #f2f7ff;
         border-color: #b6cef0;
       }
-
       #eventTab .object-graphics-trigger-text {
         min-width: 0;
         flex: 1 1 auto;
@@ -56,13 +50,11 @@
         white-space: nowrap;
         text-align: left;
       }
-
       #eventTab .object-graphics-trigger-arrow {
         flex: 0 0 auto;
         color: #64748b;
         font-size: 10px;
       }
-
       #eventTab .object-graphics-dropdown {
         position: absolute;
         z-index: 3000;
@@ -76,11 +68,7 @@
         background: #fff;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
       }
-
-      #eventTab .object-graphics-combo.open .object-graphics-dropdown {
-        display: block;
-      }
-
+      #eventTab .object-graphics-combo.open .object-graphics-dropdown { display: block; }
       #eventTab .object-graphics-search {
         width: 100% !important;
         height: 28px !important;
@@ -93,19 +81,16 @@
         font-size: 12px !important;
         box-sizing: border-box !important;
       }
-
       #eventTab .object-graphics-search:focus {
         outline: none !important;
         border-color: #1f5fbf !important;
         box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.12) !important;
       }
-
       #eventTab .object-graphics-options {
         max-height: 240px;
         overflow: auto;
         padding-right: 2px;
       }
-
       #eventTab .object-graphics-option {
         display: flex;
         align-items: center;
@@ -118,11 +103,7 @@
         cursor: pointer;
         user-select: none;
       }
-
-      #eventTab .object-graphics-option:hover {
-        background: #f4f8ff;
-      }
-
+      #eventTab .object-graphics-option:hover { background: #f4f8ff; }
       #eventTab .object-graphics-option input {
         width: 14px !important;
         height: 14px !important;
@@ -131,14 +112,12 @@
         accent-color: #1f8fe5;
         cursor: pointer;
       }
-
       #eventTab .object-graphics-option-text {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-
       #eventTab .object-graphics-empty {
         padding: 8px 2px;
         color: #64748b;
@@ -186,15 +165,14 @@
   }
 
   function closeOpenDropdown(except = null) {
-    if (openDropdown && openDropdown !== except) {
-      openDropdown.classList.remove("open");
-    }
+    if (openDropdown && openDropdown !== except) openDropdown.classList.remove("open");
     openDropdown = except;
   }
 
   function buildCombo(currentValue) {
     const wrapper = document.createElement("div");
     wrapper.className = "object-graphics-combo";
+    wrapper.dataset.objectGraphicsSelectDone = "1";
 
     const hidden = document.createElement("input");
     hidden.type = "hidden";
@@ -205,10 +183,7 @@
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "object-graphics-trigger";
-    trigger.innerHTML = `
-      <span class="object-graphics-trigger-text"></span>
-      <span class="object-graphics-trigger-arrow">▼</span>
-    `;
+    trigger.innerHTML = `<span class="object-graphics-trigger-text"></span><span class="object-graphics-trigger-arrow">▼</span>`;
 
     const dropdown = document.createElement("div");
     dropdown.className = "object-graphics-dropdown";
@@ -244,12 +219,7 @@
     function matchItem(item, query) {
       const q = String(query || "").trim().toLowerCase();
       if (!q) return true;
-      const text = [
-        String(item.id ?? ""),
-        formatHex(item.id),
-        item.name || "",
-        item.macro || "",
-      ].join(" ").toLowerCase();
+      const text = [String(item.id ?? ""), formatHex(item.id), item.name || "", item.macro || ""].join(" ").toLowerCase();
       return text.includes(q);
     }
 
@@ -292,6 +262,7 @@
 
     trigger.addEventListener("click", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       const willOpen = !wrapper.classList.contains("open");
       closeOpenDropdown(willOpen ? wrapper : null);
       wrapper.classList.toggle("open", willOpen);
@@ -310,15 +281,31 @@
     return wrapper;
   }
 
+  function findGraphicsField() {
+    const eventTab = document.getElementById("eventTab");
+    if (!eventTab) return null;
+
+    const direct = eventTab.querySelector(':is(input, select)[data-event-field="graphicsId"]');
+    if (direct && !direct.closest(".object-graphics-combo")) return direct;
+
+    const valueRows = Array.from(eventTab.querySelectorAll(".event-object-param-label"));
+    const graphicsLabel = valueRows.find(el => el.textContent.trim() === "图形");
+    const valueEl = graphicsLabel?.nextElementSibling;
+    const fallback = valueEl?.querySelector(':is(input, select)[data-event-field="graphicsId"]');
+    if (fallback && !fallback.closest(".object-graphics-combo")) return fallback;
+
+    return null;
+  }
+
   function enhanceObjectGraphicsSelect() {
     injectStyle();
-    const input = document.querySelector('#eventTab input[data-event-field="graphicsId"]');
-    if (!input || input.dataset.objectGraphicsSelectDone === "1") return;
+    const field = findGraphicsField();
+    if (!field || field.dataset.objectGraphicsSelectDone === "1") return;
 
-    const currentValue = parseValue(input.value);
+    const currentValue = parseValue(field.value);
     const combo = buildCombo(currentValue);
-    input.dataset.objectGraphicsSelectDone = "1";
-    input.replaceWith(combo);
+    field.dataset.objectGraphicsSelectDone = "1";
+    field.replaceWith(combo);
   }
 
   document.addEventListener("click", (e) => {
@@ -330,12 +317,12 @@
   function install() {
     observer.observe(document.body, { childList: true, subtree: true });
     enhanceObjectGraphicsSelect();
+    setTimeout(enhanceObjectGraphicsSelect, 0);
+    setTimeout(enhanceObjectGraphicsSelect, 100);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
   else install();
 
-  window.RBEditorObjectGraphicsSelect = {
-    enhanceObjectGraphicsSelect,
-  };
+  window.RBEditorObjectGraphicsSelect = { enhanceObjectGraphicsSelect };
 })();
