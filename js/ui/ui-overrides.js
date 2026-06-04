@@ -106,9 +106,17 @@
       .metadata-card h3 { margin:0 0 14px; }
       .metadata-form-row { display:grid; grid-template-columns:120px minmax(0, 1fr); gap:12px; align-items:center; margin-bottom:12px; }
       .metadata-form-row label { color:var(--muted); font-size:13px; font-weight:700; }
+      .metadata-region-control { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; align-items:center; }
+      .metadata-region-select { width:100%; min-width:0; margin:0; padding:7px 9px; font-size:12px; color:var(--text) !important; background:#fff !important; background-color:#fff !important; }
+      .metadata-region-select option { color:var(--text) !important; background:#fff !important; background-color:#fff !important; }
+      .metadata-region-edit-btn { width:auto; margin:0; padding:7px 12px; white-space:nowrap; font-size:12px; }
       .metadata-weather-host .weather-control { display:flex; width:100%; flex:1 1 auto; }
       .metadata-weather-host .weather-control label { display:none; }
       .metadata-weather-host .weather-control select { width:100%; }
+      .region-name-modal { max-width:520px; }
+      .region-name-input { width:100%; box-sizing:border-box; }
+      .region-name-edit-status { min-height:20px; margin-top:8px; color:var(--muted); font-size:12px; }
+      .region-name-edit-status.error { color:#dc2626; font-weight:700; }
 
       .connector-panel { display:none; height:100%; min-height:0; overflow:auto; padding-right:4px; }
       .connector-panel.active { display:block; }
@@ -215,6 +223,15 @@
       <div class="metadata-card">
         <h3>地图元数据</h3>
         <div class="metadata-form-row">
+          <label for="regionMapSectionSelect">所属区域</label>
+          <div class="metadata-region-control">
+            <select id="regionMapSectionSelect" class="metadata-region-select" disabled>
+              <option value="">未加载地图</option>
+            </select>
+            <button id="editRegionMapNameBtn" class="metadata-region-edit-btn" type="button" disabled>修改区域名称</button>
+          </div>
+        </div>
+        <div class="metadata-form-row">
           <label>天气</label>
           <div id="metadataWeatherHost" class="metadata-weather-host"></div>
         </div>
@@ -227,6 +244,37 @@
     if (weather && host) host.appendChild(weather);
 
     return panel;
+  }
+
+  function ensureRegionNameModal() {
+    let modal = document.getElementById("regionNameModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "regionNameModal";
+    modal.className = "modal-backdrop";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = `
+      <div class="modal region-name-modal" role="dialog" aria-modal="true" aria-labelledby="regionNameModalTitle">
+        <div class="modal-header">
+          <div>
+            <h2 id="regionNameModalTitle" class="modal-title">修改区域名称</h2>
+            <div id="regionNameModalSubtitle" class="modal-subtitle"></div>
+          </div>
+          <button id="closeRegionNameModal" class="modal-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body">
+          <label for="regionNameInput">英文区域名称</label>
+          <input id="regionNameInput" class="region-name-input" type="text" maxlength="64" autocomplete="off" spellcheck="false" />
+          <div id="regionNameEditStatus" class="region-name-edit-status">只能使用英文字母、数字、空格和常用英文标点。</div>
+        </div>
+        <div class="modal-footer">
+          <button id="cancelRegionNameEdit" class="secondary-btn" type="button">取消</button>
+          <button id="saveRegionNameEdit" type="button">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    return modal;
   }
 
   function ensureConnectorPanel() {
@@ -318,6 +366,7 @@
     ensureEditorModeBar();
     ensureMapToolbar();
     ensureMetadataPanel();
+    ensureRegionNameModal();
     ensureConnectorPanel();
     wrapRenderMapForGridToggle();
 
@@ -331,6 +380,7 @@
     ensureEditorModeBar,
     ensureMapToolbar,
     ensureMetadataPanel,
+    ensureRegionNameModal,
     ensureConnectorPanel,
     drawBlackGridOverlay,
   };

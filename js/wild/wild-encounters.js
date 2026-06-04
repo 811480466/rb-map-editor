@@ -1,16 +1,53 @@
 // ============================================================
 // Wild Pokémon encounter parsing / writing / creation
 // ============================================================
-// 通过 0x00625DB0 处的 gWildMonHeaders 指针动态定位 Header 表。
-// 后续迁移 gWildMonHeaders 到新区域时，只要修改这个指针，读取逻辑无需再改。
+// 通过 ROM 中多处 gWildMonHeaders 引用指针动态定位 Header 表。
+// 后续迁移 gWildMonHeaders 到新区域时，只要同步这些引用指针，读取逻辑无需再改。
 // 支持写回 WildPokemon：minLevel / maxLevel / species。
 // 支持给没有野生遭遇表的新地图创建默认遭遇表。
 
+// struct WildPokemonHeader
+// {
+//     u8 mapGroup;
+//     u8 mapNum;
+//     const struct WildPokemonInfo *landMonsInfo;
+//     const struct WildPokemonInfo *waterMonsInfo;
+//     const struct WildPokemonInfo *rockSmashMonsInfo;
+//     const struct WildPokemonInfo *fishingMonsInfo;
+// };
+
+// struct WildPokemonInfo
+// {
+//     u8 encounterRate;
+//     const struct WildPokemon *wildPokemon;
+// };
+
+// struct WildPokemon
+// {
+//     u8 minLevel;
+//     u8 maxLevel;
+//     u16 species;
+// };
+
 (function wildEncountersModule() {
-  const WILD_DATA_START = 0x00625D7C;
-  const WILD_DATA_END = 0x0062863C;
-  const WILD_HEADER_TABLE_PTR_OFFSET = 0x00625DB0;
-  const WILD_HEADER_TABLE_SIZE_FALLBACK = 0x0062863C;
+  const WILD_HEADER_TABLE_PTR_OFFSETS = [
+    0x000D31D8,
+    0x000D39DC,
+    0x000D3A34,
+    0x000D3ADC,
+    0x000D3BA8,
+    0x000D3CC4,
+    0x000D3D24,
+    0x000D3D70,
+    0x000D3DEC,
+    0x000D3E30,
+    0x000D3EB8,
+    0x0016CEDC,
+    0x0016CF18,
+    0x001C8058,
+  ];
+  const WILD_HEADER_TABLE_PTR_OFFSET = WILD_HEADER_TABLE_PTR_OFFSETS[0];
+  const WILD_HEADER_TABLE_SCAN_LIMIT = 0x800;
   const WILD_HEADER_SIZE = 0x14;
   const WILD_INFO_SIZE = 0x08;
   const WILD_MON_SIZE = 0x04;
@@ -29,29 +66,77 @@
     return WILD_GROUPS.find(g => g.key === kind) || null;
   }
 
-  function getWildHeaderTablePtr() {
-    if (!isValidOffset(WILD_HEADER_TABLE_PTR_OFFSET, 4)) {
-      throw new Error(`gWildMonHeaders 指针位置无效：${hex(WILD_HEADER_TABLE_PTR_OFFSET)}`);
+  function isValidWildPokemonInfoPtr(infoPtr, def) {
+    const infoOffset = ptrToOffset(infoPtr);
+    if (infoOffset === null || !isValidOffset(infoOffset, WILD_INFO_SIZE)) return false;
+
+    const monsPtr = readPtr(infoOffset + 0x04);
+    const monsOffset = ptrToOffset(monsPtr);
+    return monsOffset !== null && isValidOffset(monsOffset, def.count * WILD_MON_SIZE);
+  }
+
+  function isLikelyWildHeaderTableOffset(start) {
+    if (start === null || !isValidOffset(start, WILD_HEADER_SIZE)) return false;
+
+    let headerCount = 0;
+    for (let i = 0; i < WILD_HEADER_TABLE_SCAN_LIMIT; i++) {
+      const off = start + i * WILD_HEADER_SIZE;
+      if (!isValidOffset(off, WILD_HEADER_SIZE)) return false;
+
+      const mapGroup = readU8(off + 0x00);
+      const mapNum = readU8(off + 0x01);
+      if (mapGroup === 0xFF && mapNum === 0xFF) return headerCount > 0;
+
+      let hasEncounterGroup = false;
+      for (const def of WILD_GROUPS) {
+        const ptr = readPtr(off + def.offset);
+        if (!ptr) continue;
+        hasEncounterGroup = true;
+        if (!isValidWildPokemonInfoPtr(ptr, def)) return false;
+      }
+      if (!hasEncounterGroup) return false;
+      headerCount++;
     }
-    return readPtr(WILD_HEADER_TABLE_PTR_OFFSET);
+    return false;
+  }
+
+  function getWildHeaderTableCandidates() {
+    const candidates = [];
+    for (const ptrOffset of WILD_HEADER_TABLE_PTR_OFFSETS) {
+      if (!isValidOffset(ptrOffset, 4)) continue;
+      const ptr = readPtr(ptrOffset);
+      const offset = ptrToOffset(ptr);
+      if (!isLikelyWildHeaderTableOffset(offset)) continue;
+      candidates.push({ ptrOffset, ptr, offset });
+    }
+    return candidates;
+  }
+
+  function getWildHeaderTableRef() {
+    const candidates = getWildHeaderTableCandidates();
+    if (!candidates.length) {
+      const offsets = WILD_HEADER_TABLE_PTR_OFFSETS.map(off => hex(off)).join(", ");
+      throw new Error(`没有从 gWildMonHeaders 引用指针读取到有效 Header 表：${offsets}`);
+    }
+    return candidates[0];
+  }
+
+  function getWildHeaderTablePtr() {
+    return getWildHeaderTableRef().ptr;
   }
 
   function getWildHeaderTableStart() {
-    const ptr = getWildHeaderTablePtr();
-    const off = ptrToOffset(ptr);
-    if (off === null || !isValidOffset(off, WILD_HEADER_SIZE)) {
-      throw new Error(`gWildMonHeaders 指针无效：ptr=${hex(ptr)} ptrOff=${hex(WILD_HEADER_TABLE_PTR_OFFSET)}`);
-    }
-    return off;
+    return getWildHeaderTableRef().offset;
   }
 
   function getWildHeaderTableInfo() {
-    const ptr = getWildHeaderTablePtr();
-    const off = getWildHeaderTableStart();
+    const ref = getWildHeaderTableRef();
     return {
-      ptrOffset: WILD_HEADER_TABLE_PTR_OFFSET,
-      ptr,
-      offset: off,
+      ptrOffset: ref.ptrOffset,
+      ptrOffsets: WILD_HEADER_TABLE_PTR_OFFSETS.slice(),
+      ptr: ref.ptr,
+      offset: ref.offset,
+      candidates: getWildHeaderTableCandidates(),
     };
   }
 
@@ -330,14 +415,13 @@
   }
 
   window.RBEditorWildEncounters = {
-    WILD_DATA_START,
-    WILD_DATA_END,
+    WILD_HEADER_TABLE_PTR_OFFSETS,
     WILD_HEADER_TABLE_PTR_OFFSET,
-    WILD_HEADER_TABLE_SIZE_FALLBACK,
     WILD_FREE_SPACE_START,
     WILD_GROUPS,
     getWildHeaderTablePtr,
     getWildHeaderTableStart,
+    getWildHeaderTableCandidates,
     getWildHeaderTableInfo,
     loadWildEncounterHeaders,
     findWildEncounterForMap,

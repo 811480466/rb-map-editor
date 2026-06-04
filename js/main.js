@@ -2,6 +2,7 @@
 // UI
 // ============================================================
 let selectedMapIndex = -1;
+const REGION_NAME_MAX_LENGTH = 64;
 
 function getEditorModeFromState() {
   return document.querySelector(".editor-mode-option.active")?.dataset.editorMode || window.RBEditorState?.mode || "terrain";
@@ -123,10 +124,190 @@ function updateWeatherSelect(header) {
   select.value = String(header.weather);
 }
 
+function getRegionMapSectionOptionText(region) {
+  const id = Number(region?.id ?? 0) & 0xFF;
+  const name = region?.name || `Section ${id}`;
+  return `${name}（编码:${id}）`;
+}
+
+function rebuildRegionMapSectionOptions(select, selectedId) {
+  if (!select) return;
+
+  select.innerHTML = "";
+  const regionsById = new Map();
+  for (const header of mapHeaders) {
+    const region = header.regionMap;
+    if (!region || regionsById.has(region.id)) continue;
+    regionsById.set(region.id, region);
+  }
+
+  for (const [id, region] of regionsById) {
+    const opt = document.createElement("option");
+    opt.value = String(id);
+    opt.textContent = getRegionMapSectionOptionText(region);
+    select.appendChild(opt);
+  }
+
+  if (![...select.options].some(opt => opt.value === String(selectedId))) {
+    const region = readRegionMapName(selectedId);
+    const opt = document.createElement("option");
+    opt.value = String(selectedId);
+    opt.textContent = getRegionMapSectionOptionText(region);
+    select.appendChild(opt);
+  }
+}
+
+function updateRegionMapSectionSelect(header) {
+  const select = document.getElementById("regionMapSectionSelect");
+  const editButton = document.getElementById("editRegionMapNameBtn");
+  if (!select) return;
+
+  if (!header) {
+    select.disabled = true;
+    select.innerHTML = `<option value="">未加载地图</option>`;
+    if (editButton) editButton.disabled = true;
+    return;
+  }
+
+  rebuildRegionMapSectionOptions(select, header.regionMapSectionId);
+  select.disabled = false;
+  select.value = String(header.regionMapSectionId);
+  if (editButton) editButton.disabled = false;
+}
+
+function refreshRegionMapSuffixCodes() {
+  const regionMapNameCounts = new Map();
+  for (const header of mapHeaders) {
+    const regionMapName = header.regionMap?.name ?? "";
+    const suffixCode = regionMapNameCounts.get(regionMapName) ?? 0;
+    if (header.regionMap) header.regionMap.suffixCode = suffixCode;
+    regionMapNameCounts.set(regionMapName, suffixCode + 1);
+  }
+}
+
+function validateRegionEnglishName(value) {
+  const name = String(value ?? "").trim().replace(/ +/g, " ");
+  if (!name) throw new Error("区域名称不能为空。");
+  if (name.length > REGION_NAME_MAX_LENGTH) {
+    throw new Error(`区域名称不能超过 ${REGION_NAME_MAX_LENGTH} 个字符。`);
+  }
+  if (!/^[A-Za-z0-9 .,'!?()&+\-/%:;=<>]+$/.test(name)) {
+    throw new Error("区域名称只能使用英文字母、数字、空格和常用英文标点。");
+  }
+  encodePokemonEnglishText(name);
+  return name;
+}
+
+function getRegionNameCapacity(nameOff) {
+  if (nameOff === null || !isValidOffset(nameOff, 1)) {
+    throw new Error("当前区域名称指针无效，无法修改。");
+  }
+
+  for (let length = 0; length < REGION_NAME_MAX_LENGTH; length++) {
+    if (!isValidOffset(nameOff + length, 1)) break;
+    if (readU8(nameOff + length) === 0xFF) return length + 1;
+  }
+
+  throw new Error(`当前区域名称超过 ${REGION_NAME_MAX_LENGTH} 字节仍未结束，无法安全原地修改。`);
+}
+
+function writeRegionMapName(regionId, name) {
+  if (!rom) throw new Error("尚未加载 ROM。");
+  const entryOffset = G_REGION_MAP_ENTRIES + regionId * REGION_MAP_ENTRY_SIZE;
+  if (!isValidOffset(entryOffset, REGION_MAP_ENTRY_SIZE)) {
+    throw new Error(`区域条目偏移无效：${hex(entryOffset)}`);
+  }
+
+  const encoded = encodePokemonEnglishText(name);
+  const currentRegion = readRegionMapName(regionId);
+  const capacity = getRegionNameCapacity(currentRegion.nameOff);
+  if (encoded.length > capacity) {
+    throw new Error(`区域名称不能超过原长度：最多 ${capacity - 1} 字符，当前 ${encoded.length - 1} 字符。`);
+  }
+
+  for (let i = 0; i < capacity; i++) writeU8(currentRegion.nameOff + i, 0xFF);
+  for (let i = 0; i < encoded.length; i++) writeU8(currentRegion.nameOff + i, encoded[i]);
+  return readRegionMapName(regionId);
+}
+
+function setRegionNameEditStatus(message, isError = false) {
+  const status = document.getElementById("regionNameEditStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function closeRegionNameModal() {
+  const modal = document.getElementById("regionNameModal");
+  if (!modal) return;
+  modal.classList.remove("open", "show");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function openRegionNameModal() {
+  const select = document.getElementById("regionMapSectionSelect");
+  if (!rom || !currentMap || !select || select.disabled) return;
+
+  const modal = document.getElementById("regionNameModal") || window.RBEditorAppShell?.ensureRegionNameModal?.();
+  const regionId = Number(select.value) & 0xFF;
+  const region = mapHeaders.find(header => header.regionMap?.id === regionId)?.regionMap || readRegionMapName(regionId);
+  const input = document.getElementById("regionNameInput");
+  const subtitle = document.getElementById("regionNameModalSubtitle");
+  if (!modal || !input) return;
+
+  modal.dataset.regionId = String(regionId);
+  input.value = region.name || "";
+  if (subtitle) subtitle.textContent = `当前区域编码：${regionId}`;
+  setRegionNameEditStatus("只能使用英文字母、数字、空格和常用英文标点。");
+  modal.classList.add("open", "show");
+  modal.setAttribute("aria-hidden", "false");
+  input.focus();
+  input.select();
+}
+
+function saveRegionNameEdit() {
+  const modal = document.getElementById("regionNameModal");
+  const input = document.getElementById("regionNameInput");
+  if (!modal || !input) return;
+
+  try {
+    const regionId = Number(modal.dataset.regionId) & 0xFF;
+    const name = validateRegionEnglishName(input.value);
+    const updatedRegion = writeRegionMapName(regionId, name);
+
+    for (const header of mapHeaders) {
+      if (header.regionMap?.id !== regionId) continue;
+      header.regionMap = { ...updatedRegion, suffixCode: header.regionMap?.suffixCode ?? 0 };
+    }
+    refreshRegionMapSuffixCodes();
+    updateCurrentMapName(currentMap);
+
+    const mapInfo = document.getElementById("mapInfo");
+    if (mapInfo) mapInfo.textContent = buildMapInfoText(currentMap);
+
+    refreshMapList();
+    selectedMapIndex = filteredHeaders.indexOf(currentMap);
+    for (const item of document.querySelectorAll(".map-option")) {
+      item.classList.toggle("active", Number(item.dataset.index) === selectedMapIndex);
+    }
+
+    document.getElementById("scanInfo").textContent =
+      `已修改区域名称：${name}\n` +
+      `region id    : ${regionId}\n` +
+      `name pointer : ${hex(updatedRegion.namePtr)}\n` +
+      `name offset  : ${hex(updatedRegion.nameOff)}\n\n` +
+      `点击“导出修改后的 ROM”保存。`;
+    closeRegionNameModal();
+  } catch (err) {
+    setRegionNameEditStatus(err?.message || String(err), true);
+  }
+}
+
 function updateCurrentMapName(header) {
   document.getElementById("currentMapName").textContent = header
     ? getMapDisplayNameWithSuffix(header)
     : "未选择地图";
+  updateRegionMapSectionSelect(header);
   updateWeatherSelect(header);
 }
 
@@ -347,6 +528,41 @@ function applyCurrentMapWeather(value) {
     `点击“导出修改后的 ROM”保存。`;
 }
 
+function applyCurrentMapRegionMapSection(value) {
+  if (!rom || !currentMap) return;
+  const regionMapSectionId = Number(value) & 0xFF;
+  const regionOff = currentMap.offset + 0x14;
+  if (!isValidOffset(regionOff, 1)) {
+    alert("当前地图 regionMapSectionId 偏移无效，无法修改。");
+    updateRegionMapSectionSelect(currentMap);
+    return;
+  }
+
+  rom[regionOff] = regionMapSectionId;
+  currentMap.regionMapSectionId = regionMapSectionId;
+  currentMap.regionMap = readRegionMapName(regionMapSectionId);
+  refreshRegionMapSuffixCodes();
+
+  updateCurrentMapName(currentMap);
+
+  const mapInfo = document.getElementById("mapInfo");
+  if (mapInfo) mapInfo.textContent = buildMapInfoText(currentMap);
+
+  if (typeof refreshMapList === "function") {
+    refreshMapList();
+    selectedMapIndex = filteredHeaders.indexOf(currentMap);
+    for (const item of document.querySelectorAll(".map-option")) {
+      item.classList.toggle("active", Number(item.dataset.index) === selectedMapIndex);
+    }
+  }
+
+  document.getElementById("scanInfo").textContent =
+    `已修改所属区域：${getMapDisplayNameWithSuffix(currentMap)}\n` +
+    `region offset : ${hex(regionOff)}\n` +
+    `region value  : ${hex(regionMapSectionId, 2)} (${getMapDisplayName(currentMap)})\n\n` +
+    `点击“导出修改后的 ROM”保存。`;
+}
+
 function exportModifiedRom() {
   if (!rom) return;
   const baseName = (romFileName || "rom.gba").replace(/\.(gba|bin)$/i, "");
@@ -367,6 +583,35 @@ const weatherSelectEl = document.getElementById("weatherSelect");
 if (weatherSelectEl) {
   weatherSelectEl.addEventListener("change", (e) => applyCurrentMapWeather(e.target.value));
 }
+
+document.addEventListener("change", (e) => {
+  if (e.target?.id === "regionMapSectionSelect") {
+    applyCurrentMapRegionMapSection(e.target.value);
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (e.target?.id === "editRegionMapNameBtn") {
+    openRegionNameModal();
+  } else if (e.target?.id === "saveRegionNameEdit") {
+    saveRegionNameEdit();
+  } else if (e.target?.id === "closeRegionNameModal" || e.target?.id === "cancelRegionNameEdit") {
+    closeRegionNameModal();
+  } else if (e.target?.id === "regionNameModal") {
+    closeRegionNameModal();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  const modal = document.getElementById("regionNameModal");
+  if (!modal?.classList.contains("show")) return;
+  if (e.key === "Escape") {
+    closeRegionNameModal();
+  } else if (e.key === "Enter" && e.target?.id === "regionNameInput") {
+    e.preventDefault();
+    saveRegionNameEdit();
+  }
+});
 
 const exportRomBtn = document.getElementById("exportRomBtn");
 if (exportRomBtn) {

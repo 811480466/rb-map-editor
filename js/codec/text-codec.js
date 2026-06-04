@@ -132,3 +132,21 @@ function decodePokemonText(offset, maxLen = 120) {
 
   return s;
 }
+
+function encodePokemonEnglishText(text) {
+  const reverseMap = new Map();
+  for (const [code, char] of TEXT_CHARMAP) {
+    if (!reverseMap.has(char)) reverseMap.set(char, code);
+  }
+
+  const bytes = [];
+  for (const char of String(text)) {
+    const code = reverseMap.get(char);
+    if (code === undefined) {
+      throw new Error(`区域名称包含不支持的字符：${char}`);
+    }
+    bytes.push(code);
+  }
+  bytes.push(0xFF);
+  return bytes;
+}
