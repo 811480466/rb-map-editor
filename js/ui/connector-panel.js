@@ -82,7 +82,11 @@
 
     currentMap.connectionsParsed = parseMapConnections(currentMap.connectionsPtr);
     renderConnectionEdgeNav(currentMap);
-    if (currentMap) renderMap(currentMap, currentEvents);
+    if (currentMap && window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
+      window.RBEditorConnectionPreview.render(currentMap);
+    } else if (currentMap) {
+      renderMap(currentMap, currentEvents);
+    }
     renderConnectorPanel();
   }
 

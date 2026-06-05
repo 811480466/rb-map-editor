@@ -89,7 +89,9 @@
       if (!force && key === lastSelectedKey) return;
       lastSelectedKey = key;
 
-      if (typeof currentMap !== "undefined" && currentMap && typeof renderMap === "function") {
+      if (typeof currentMap !== "undefined" && currentMap && window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
+        window.RBEditorConnectionPreview.render(currentMap);
+      } else if (typeof currentMap !== "undefined" && currentMap && typeof renderMap === "function") {
         renderMap(currentMap, typeof currentEvents !== "undefined" ? currentEvents : []);
       }
     }, 0);

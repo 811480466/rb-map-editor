@@ -312,6 +312,15 @@ function updateCurrentMapName(header) {
   updateWeatherSelect(header);
 }
 
+async function renderCurrentMapSurface(header = currentMap, events = currentEvents) {
+  if (!header) return;
+  if (getEditorModeFromState() === "connections" && window.RBEditorConnectionPreview?.render) {
+    await window.RBEditorConnectionPreview.render(header);
+  } else {
+    await renderMap(header, events || []);
+  }
+}
+
 function resetViewerState(keepRom = false) {
   if (!keepRom) {
     rom = null;
@@ -448,7 +457,7 @@ function selectMap(idx, switchToEventsTab = false) {
     item.classList.toggle("active", Number(item.dataset.index) === idx);
   }
 
-  autoMatchTilesetsForCurrentMap().then(() => renderMap(header, currentEvents));
+  autoMatchTilesetsForCurrentMap().then(() => renderCurrentMapSurface(header, currentEvents));
 
   if (getEditorModeFromState() === "events" || switchToEventsTab) {
     ensureEventPanelIfNeeded(true);
@@ -665,16 +674,16 @@ document.getElementById("tilesetZipFile").addEventListener("change", async (e) =
 });
 
 document.getElementById("primaryTilesetSelect").addEventListener("change", async () => {
-  if (currentMap) await renderMap(currentMap, currentEvents);
+  await renderCurrentMapSurface();
 });
 
 document.getElementById("secondaryTilesetSelect").addEventListener("change", async () => {
-  if (currentMap) await renderMap(currentMap, currentEvents);
+  await renderCurrentMapSurface();
 });
 
 document.getElementById("autoMatchTilesets").addEventListener("change", async () => {
   await autoMatchTilesetsForCurrentMap();
-  if (currentMap) await renderMap(currentMap, currentEvents);
+  await renderCurrentMapSurface();
 });
 
 document.getElementById("clearBtn").addEventListener("click", () => {
@@ -696,6 +705,6 @@ document.getElementById("clearBtn").addEventListener("click", () => {
 const useRomTilesetsEl = document.getElementById("useRomTilesets");
 if (useRomTilesetsEl) {
   useRomTilesetsEl.addEventListener("change", async () => {
-    if (currentMap) await renderMap(currentMap, currentEvents);
+    await renderCurrentMapSurface();
   });
 }

@@ -623,7 +623,11 @@ async function buildTilesetCatalogFromZip(file) {
 
   fillTilesetSelects();
   await autoMatchTilesetsForCurrentMap();
-  if (currentMap) await renderMap(currentMap, currentEvents);
+  if (currentMap && window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
+    await window.RBEditorConnectionPreview.render(currentMap);
+  } else if (currentMap) {
+    await renderMap(currentMap, currentEvents);
+  }
 
   return tilesetCatalog;
 }

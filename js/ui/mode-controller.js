@@ -234,6 +234,9 @@
     if (window.RBEditorConnectorPanel?.render) {
       window.RBEditorConnectorPanel.render();
     }
+    if (window.RBEditorConnectionPreview?.render) {
+      window.RBEditorConnectionPreview.render(currentMap);
+    }
   }
 
   function showWildMode() {

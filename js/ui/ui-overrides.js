@@ -204,7 +204,11 @@
     const toggle = document.getElementById("blackGridToggle");
     if (toggle) {
       toggle.addEventListener("change", async () => {
-        if (currentMap && window.RBEditorState?.mode !== "metadata") await renderMap(currentMap, currentEvents);
+        if (currentMap && window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
+          await window.RBEditorConnectionPreview.render(currentMap);
+        } else if (currentMap && window.RBEditorState?.mode !== "metadata") {
+          await renderMap(currentMap, currentEvents);
+        }
       });
     }
   }
