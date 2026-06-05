@@ -126,8 +126,9 @@ function updateWeatherSelect(header) {
 
 function getRegionMapSectionOptionText(region) {
   const id = Number(region?.id ?? 0) & 0xFF;
-  const name = region?.name || `Section ${id}`;
-  return `${name}（编码:${id}）`;
+  const rawName = region?.name || `Section ${id}`;
+  const displayName = translateMapName(rawName) || rawName;
+  return `${displayName}（编码:${id}）`;
 }
 
 function rebuildRegionMapSectionOptions(select, selectedId) {
