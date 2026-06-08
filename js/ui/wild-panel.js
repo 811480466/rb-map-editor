@@ -52,9 +52,10 @@
       .wild-create-box { margin: 12px 16px 16px; padding: 14px; border: 1px dashed #b9d0ee; border-radius: 12px; background: #fbfdff; }
       .wild-create-title { color: #153b78; font-weight: 800; font-size: 14px; margin-bottom: 8px; }
       .wild-create-desc { color: #64748b; font-size: 12px; line-height: 1.5; margin-bottom: 12px; }
-      .wild-create-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+      .wild-create-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
       .wild-create-field { display: flex; flex-direction: column; gap: 4px; color: #24466f; font-size: 12px; }
       .wild-create-field input { width: 100% !important; margin: 0 !important; padding: 5px 7px !important; box-sizing: border-box !important; }
+      .wild-create-pokemon-host { width: 100%; }
       .wild-create-checks { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 12px; color: #24466f; font-size: 12px; }
       .wild-create-checks label { display: inline-flex; align-items: center; gap: 5px; }
       .wild-create-status { min-height: 18px; color: #64748b; font-size: 12px; }
@@ -196,8 +197,6 @@
     const desc = mode === "map"
       ? "当前地图没有野生遭遇 Header。创建后会在空闲区写入 WildMonInfo / WildPokemon，并在原 Header 表末尾追加新记录。"
       : "当前地图已有野生遭遇 Header，但这个类型为空。添加后会写入对应 WildMonInfo / WildPokemon，并更新当前 Header 指针。";
-    const freeStart = window.RBEditorWildEncounters?.WILD_FREE_SPACE_START ?? 0x01900000;
-
     const checks = mode === "map"
       ? `<div class="wild-create-checks">
           ${GROUP_ORDER.map((g, i) => `<label><input type="checkbox" data-create-group="${g.key}" ${i === 0 ? "checked" : ""}>${g.label}</label>`).join("")}
@@ -210,10 +209,9 @@
         <div class="wild-create-desc">${escapeText(desc)}</div>
         ${checks}
         <div class="wild-create-grid">
-          <label class="wild-create-field">默认宝可梦 ID<input id="wildCreateSpecies" type="text" value="1"></label>
+          <label class="wild-create-field">默认宝可梦<div id="wildCreateSpeciesHost" class="wild-create-pokemon-host"></div></label>
           <label class="wild-create-field">最低等级<input id="wildCreateMinLevel" type="number" min="1" max="100" value="2"></label>
           <label class="wild-create-field">最高等级<input id="wildCreateMaxLevel" type="number" min="1" max="100" value="2"></label>
-          <label class="wild-create-field">空闲区起始<input id="wildCreateFreeStart" type="text" value="${escapeText(typeof hex === "function" ? hex(freeStart) : `0x${freeStart.toString(16)}`)}"></label>
         </div>
         <div style="display:flex; align-items:center; gap:10px; justify-content:flex-end;">
           <span id="wildCreateStatus" class="wild-create-status"></span>
@@ -226,25 +224,25 @@
   function bindCreateBox(mode, groupKey = "") {
     const btn = document.getElementById("createWildEncounterBtn");
     if (!btn || !currentMap) return;
+    enhanceCreatePokemonDropdown();
 
     btn.onclick = () => {
       try {
-        const species = parseNumberInput(document.getElementById("wildCreateSpecies")?.value, 1);
+        const speciesInput = document.querySelector('#wildCenterPanel .wild-create-box [data-event-field="species"]');
+        const species = parsePokemonInput(speciesInput?.value);
+        if (species === null) throw new Error(`无法识别宝可梦：${speciesInput?.value || "空"}`);
         const minLevel = parseNumberInput(document.getElementById("wildCreateMinLevel")?.value, 2);
         const maxLevel = parseNumberInput(document.getElementById("wildCreateMaxLevel")?.value, minLevel);
-        const freeStart = parseNumberInput(document.getElementById("wildCreateFreeStart")?.value, window.RBEditorWildEncounters?.WILD_FREE_SPACE_START ?? 0x01900000);
 
         if (mode === "map") {
           const enabledGroups = Array.from(document.querySelectorAll("[data-create-group]:checked")).map(el => el.dataset.createGroup);
           if (!enabledGroups.length) throw new Error("至少选择一种遭遇类型。 ");
           window.RBEditorWildEncounters.createWildEncounterForMap(currentMap.mapGroup, currentMap.mapNum, {
             enabledGroups,
-            freeStart,
             defaultEntry: { species, minLevel, maxLevel },
           });
         } else {
           window.RBEditorWildEncounters.addWildGroupToExistingHeader(currentMap.mapGroup, currentMap.mapNum, groupKey, {
-            freeStart,
             defaultEntry: { species, minLevel, maxLevel },
           });
         }
@@ -279,7 +277,7 @@
         <div class="wild-toolbar">
           <div class="wild-card-subtitle" style="margin:0;">遭遇率：${group.encounterRate}　数据偏移：${escapeText(typeof hex === "function" ? hex(group.monsOffset) : group.monsOffset)}</div>
           <div style="display:flex; align-items:center; gap:10px;">
-            <span id="wildEditStatus" class="wild-edit-status">未应用修改。</span>
+            <span id="wildEditStatus" class="wild-edit-status"></span>
             <button id="applyWildEditBtn" class="wild-apply-btn" type="button">应用修改</button>
           </div>
         </div>
@@ -315,6 +313,26 @@
     }
   }
 
+  function enhanceCreatePokemonDropdown() {
+    const Dropdown = window.RBEditorSearchableDropdown;
+    const host = document.getElementById("wildCreateSpeciesHost");
+    if (!Dropdown || !host || host.dataset.dropdownDone === "1") return;
+
+    host.dataset.dropdownDone = "1";
+    new Dropdown({
+      container: host,
+      value: 1,
+      options: getPokemonList(),
+      fieldName: "species",
+      hiddenClassName: "wild-create-pokemon-hidden-input",
+      placeholder: "搜索宝可梦 ID / 名称 / 英文",
+      getValue: item => Number(item.id),
+      getLabel: item => formatPokemonText(item.id),
+      getSearchText: item => pokemonSearchText(item),
+      onChange: () => setCreateStatus(""),
+    });
+  }
+
   function bindEditEvents(group) {
     const applyBtn = document.getElementById("applyWildEditBtn");
     if (!applyBtn || !group) return;
@@ -339,7 +357,6 @@
           window.RBEditorWildEncounters.writeWildPokemonEntry(entry, { minLevel, maxLevel, species });
         }
         setEditStatus("已应用修改。导出 ROM 后生效。", "ok");
-        renderCenterPanel();
         renderRightPanel();
       } catch (err) {
         setEditStatus(err?.message || "应用失败", "error");

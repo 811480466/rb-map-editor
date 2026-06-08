@@ -198,11 +198,13 @@
       if (mapGroup === 0xFF && mapNum === 0xFF) break;
 
       const groups = {};
+      const groupPtrs = {};
       for (const def of WILD_GROUPS) {
         const ptr = readPtr(off + def.offset);
+        groupPtrs[def.key] = ptr;
         groups[def.key] = ptr ? parseWildPokemonInfo(ptr, def.key) : null;
       }
-      headers.push({ headerOffset: off, mapGroup, mapNum, groups });
+      headers.push({ headerOffset: off, mapGroup, mapNum, groups, groupPtrs });
     }
     return headers;
   }
@@ -262,6 +264,19 @@
     throw new Error(`没有找到可用空闲区：需要 ${size} 字节，起始 ${hex(begin)}。`);
   }
 
+  function allocateWildFreeSpace(size, tag = "WildPokemonData") {
+    if (window.RBEditorFreeSpace?.allocate) {
+      return window.RBEditorFreeSpace.allocate(size, { tag }).offset;
+    }
+    return findFreeSpace(size, WILD_FREE_SPACE_START);
+  }
+
+  function setWildFreeSpaceCursor(options = {}) {
+    if (options.freeStart !== undefined && window.RBEditorFreeSpace?.setFreeSpaceCursor) {
+      window.RBEditorFreeSpace.setFreeSpaceCursor(options.freeStart);
+    }
+  }
+
   function clearRange(off, size, value = 0x00) {
     if (!isValidOffset(off, size)) throw new Error(`ROM 写入范围无效：${hex(off)} size=${size}`);
     for (let i = 0; i < size; i++) writeU8(off + i, value);
@@ -311,7 +326,7 @@
     if (!def) throw new Error(`未知野生遭遇类型：${kind}`);
 
     const totalSize = WILD_INFO_SIZE + def.count * WILD_MON_SIZE;
-    const base = findFreeSpace(totalSize, options.freeStart ?? WILD_FREE_SPACE_START);
+    const base = allocateWildFreeSpace(totalSize, `WildPokemonInfo:${kind}`);
     clearRange(base, totalSize, 0x00);
 
     const infoOffset = base;
@@ -358,7 +373,13 @@
     writeU8(off + 0x01, 0xFF);
   }
 
-  function writeWildHeader(off, mapGroup, mapNum, groups) {
+  function getWildGroupInfoPtrForWrite(header, def) {
+    const group = header.groups?.[def.key] || null;
+    if (group?.infoOffset !== null && group?.infoOffset !== undefined) return offsetToPtr(group.infoOffset);
+    return header.groupPtrs?.[def.key] || 0;
+  }
+
+  function writeWildHeader(off, mapGroup, mapNum, groups, groupPtrs = {}) {
     clearRange(off, WILD_HEADER_SIZE, 0x00);
     writeU8(off + 0x00, clampInt(mapGroup, 0, 0xFF));
     writeU8(off + 0x01, clampInt(mapNum, 0, 0xFF));
@@ -367,8 +388,34 @@
 
     for (const def of WILD_GROUPS) {
       const group = groups?.[def.key] || null;
-      writeU32LE(off + def.offset, group ? offsetToPtr(group.infoOffset) : 0);
+      const ptr = group ? offsetToPtr(group.infoOffset) : (groupPtrs?.[def.key] || 0);
+      writeU32LE(off + def.offset, ptr);
     }
+  }
+
+  function updateWildHeaderTablePointers(tableOffset) {
+    const ptr = offsetToPtr(tableOffset);
+    for (const ptrOffset of WILD_HEADER_TABLE_PTR_OFFSETS) {
+      if (!isValidOffset(ptrOffset, 4)) continue;
+      writeU32LE(ptrOffset, ptr);
+    }
+  }
+
+  function writeWildHeaderTableToFreeSpace(headers) {
+    const totalSize = (headers.length + 1) * WILD_HEADER_SIZE;
+    const tableOffset = allocateWildFreeSpace(totalSize, "WildPokemonHeader[]");
+    clearRange(tableOffset, totalSize, 0x00);
+
+    headers.forEach((header, index) => {
+      const off = tableOffset + index * WILD_HEADER_SIZE;
+      const groupPtrs = {};
+      for (const def of WILD_GROUPS) groupPtrs[def.key] = getWildGroupInfoPtrForWrite(header, def);
+      writeWildHeader(off, header.mapGroup, header.mapNum, header.groups, groupPtrs);
+    });
+
+    writeTerminatorHeader(tableOffset + headers.length * WILD_HEADER_SIZE);
+    updateWildHeaderTablePointers(tableOffset);
+    return tableOffset;
   }
 
   function createWildEncounterForMap(mapGroup, mapNum, options = {}) {
@@ -376,41 +423,45 @@
       throw new Error(`当前地图已经存在野生遭遇表：group=${mapGroup} map=${mapNum}`);
     }
 
-    const append = canAppendWildHeaderInPlace();
-    if (!append.ok) throw new Error(append.reason);
+    setWildFreeSpaceCursor(options);
+    const headers = loadWildEncounterHeaders();
 
     const enabled = new Set(options.enabledGroups || WILD_GROUPS.map(g => g.key));
     const groups = {};
+    const groupPtrs = {};
     for (const def of WILD_GROUPS) {
       groups[def.key] = enabled.has(def.key)
         ? allocateWildGroup(def.key, {
             encounterRate: options.encounterRate?.[def.key] ?? def.defaultRate,
             defaultEntry: options.defaultEntry || {},
-            freeStart: options.freeStart ?? WILD_FREE_SPACE_START,
           })
         : null;
+      groupPtrs[def.key] = groups[def.key] ? offsetToPtr(groups[def.key].infoOffset) : 0;
     }
 
-    writeWildHeader(append.headerOffset, mapGroup, mapNum, groups);
-    writeTerminatorHeader(append.nextTerminatorOffset);
+    headers.push({ mapGroup, mapNum, groups, groupPtrs });
+    writeWildHeaderTableToFreeSpace(headers);
 
     return findWildEncounterForMap(mapGroup, mapNum);
   }
 
   function addWildGroupToExistingHeader(mapGroup, mapNum, kind, options = {}) {
-    const wild = findWildEncounterForMap(mapGroup, mapNum);
+    const headers = loadWildEncounterHeaders();
+    const wild = headers.find(h => h.mapGroup === mapGroup && h.mapNum === mapNum) || null;
     if (!wild) throw new Error("当前地图没有 Header，请先创建野生遭遇表。 ");
     if (wild.groups?.[kind]) throw new Error(`${getWildGroupDef(kind)?.label || kind} 已经存在。`);
 
     const def = getWildGroupDef(kind);
     if (!def) throw new Error(`未知野生遭遇类型：${kind}`);
 
+    setWildFreeSpaceCursor(options);
     const group = allocateWildGroup(kind, {
       encounterRate: options.encounterRate ?? def.defaultRate,
       defaultEntry: options.defaultEntry || {},
-      freeStart: options.freeStart ?? WILD_FREE_SPACE_START,
     });
-    writeU32LE(wild.headerOffset + def.offset, offsetToPtr(group.infoOffset));
+    wild.groups[kind] = group;
+    wild.groupPtrs[kind] = offsetToPtr(group.infoOffset);
+    writeWildHeaderTableToFreeSpace(headers);
     return findWildEncounterForMap(mapGroup, mapNum);
   }
 

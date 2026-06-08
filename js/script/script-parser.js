@@ -1,29 +1,130 @@
 // ============================================================
 // trainerbattle 脚本解析
 // ============================================================
+const TRAINER_BATTLE_TYPES = {
+  0: "TRAINER_BATTLE_SINGLE",
+  1: "TRAINER_BATTLE_CONTINUE_SCRIPT_NO_MUSIC",
+  2: "TRAINER_BATTLE_CONTINUE_SCRIPT",
+  3: "TRAINER_BATTLE_SINGLE_NO_INTRO_TEXT",
+  4: "TRAINER_BATTLE_DOUBLE",
+  5: "TRAINER_BATTLE_REMATCH",
+  6: "TRAINER_BATTLE_CONTINUE_SCRIPT_DOUBLE",
+  7: "TRAINER_BATTLE_REMATCH_DOUBLE",
+  8: "TRAINER_BATTLE_CONTINUE_SCRIPT_DOUBLE_NO_MUSIC",
+  9: "TRAINER_BATTLE_PYRAMID",
+  10: "TRAINER_BATTLE_SET_TRAINER_A",
+  11: "TRAINER_BATTLE_SET_TRAINER_B",
+  12: "TRAINER_BATTLE_HILL",
+};
+
+const TRAINER_BATTLE_POINTER_LAYOUTS = {
+  0: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+  1: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "afterScript", kind: "script" },
+  ],
+  2: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "afterScript", kind: "script" },
+  ],
+  3: [
+    { name: "defeat", kind: "text" },
+  ],
+  4: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "cannotBattle", kind: "text" },
+  ],
+  5: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+  6: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "cannotBattle", kind: "text" },
+    { name: "afterScript", kind: "script" },
+  ],
+  7: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "cannotBattle", kind: "text" },
+  ],
+  8: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+    { name: "cannotBattle", kind: "text" },
+    { name: "afterScript", kind: "script" },
+  ],
+  9: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+  10: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+  11: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+  12: [
+    { name: "intro", kind: "text" },
+    { name: "defeat", kind: "text" },
+  ],
+};
+
 function parseTrainerBattleScript(scriptOff) {
-  if (!isValidOffset(scriptOff, 18)) return null;
+  if (!isValidOffset(scriptOff, 6)) return null;
 
   const cmd = readU8(scriptOff);
   if (cmd !== 0x5C) return null;
 
   const battleType = readU8(scriptOff + 1);
+  const pointerLayout = TRAINER_BATTLE_POINTER_LAYOUTS[battleType];
+  if (!pointerLayout) return null;
+
+  const size = 6 + pointerLayout.length * 4;
+  if (!isValidOffset(scriptOff, size)) return null;
+
   const trainerId = readU16(scriptOff + 2);
   const localId = readU16(scriptOff + 4);
-  const introPtr = readPtr(scriptOff + 6);
-  const defeatPtr = readPtr(scriptOff + 10);
-  const afterPtr = readPtr(scriptOff + 14);
+  const pointers = pointerLayout.map((def, index) => {
+    const ptrOffset = scriptOff + 6 + index * 4;
+    const ptr = readPtr(ptrOffset);
+    return {
+      index,
+      name: def.name,
+      kind: def.kind,
+      ptrOffset,
+      ptr,
+      off: ptrToOffset(ptr),
+    };
+  });
+
+  const pointerByName = Object.fromEntries(pointers.map(p => [p.name, p]));
+  const intro = pointerByName.intro || null;
+  const defeat = pointerByName.defeat || pointers.find(p => p.kind === "text") || null;
+  const afterScript = pointerByName.afterScript || null;
 
   return {
+    size,
     battleType,
+    battleTypeName: TRAINER_BATTLE_TYPES[battleType] || `TRAINER_BATTLE_${battleType}`,
     trainerId,
     localId,
-    introPtr,
-    introOff: ptrToOffset(introPtr),
-    defeatPtr,
-    defeatOff: ptrToOffset(defeatPtr),
-    afterPtr,
-    afterOff: ptrToOffset(afterPtr),
+    pointers,
+    introPtr: intro?.ptr ?? null,
+    introOff: intro?.off ?? null,
+    defeatPtr: defeat?.ptr ?? null,
+    defeatOff: defeat?.off ?? null,
+    afterPtr: afterScript?.ptr ?? null,
+    afterOff: afterScript?.off ?? null,
   };
 }
 
@@ -148,23 +249,38 @@ function parseTrainerBattleCommandAt(startOff) {
   if (!tb) return null;
   const args = {
     battleType: tb.battleType,
+    battleTypeName: tb.battleTypeName,
     trainerId: tb.trainerId,
     localId: tb.localId,
-    intro: scriptPtrToDisplay(tb.introPtr),
-    defeat: scriptPtrToDisplay(tb.defeatPtr),
-    after: scriptPtrToDisplay(tb.afterPtr),
+    pointers: tb.pointers.map(p => ({
+      index: p.index,
+      name: p.name,
+      kind: p.kind,
+      ptrOffset: p.ptrOffset,
+      ptrOffsetHex: hex(p.ptrOffset),
+      ...scriptPtrToDisplay(p.ptr),
+    })),
   };
+  if (tb.introPtr !== null) args.intro = scriptPtrToDisplay(tb.introPtr);
+  if (tb.defeatPtr !== null) args.defeat = scriptPtrToDisplay(tb.defeatPtr);
+  if (tb.afterPtr !== null) args.after = scriptPtrToDisplay(tb.afterPtr);
+
   const introText = tb.introOff !== null ? decodePokemonText(tb.introOff, 220) : null;
   const defeatText = tb.defeatOff !== null ? decodePokemonText(tb.defeatOff, 220) : null;
   if (introText) args.introText = introText;
   if (defeatText) args.defeatText = defeatText;
+  for (const p of tb.pointers) {
+    if (p.kind !== "text" || p.off === null) continue;
+    const text = decodePokemonText(p.off, 220);
+    if (text) args[`${p.name}Text`] = text;
+  }
   return scriptLine(
     0x5C,
     "trainerbattle",
     startOff,
-    startOff + 18,
+    startOff + tb.size,
     args,
-    `trainerbattle type=${tb.battleType} trainerId=${tb.trainerId} localId=${tb.localId}`
+    `trainerbattle type=${tb.battleType} ${tb.battleTypeName} trainerId=${tb.trainerId} localId=${tb.localId}`
   );
 }
 

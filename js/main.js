@@ -485,6 +485,7 @@ async function handleRomFile(file) {
   const buf = await file.arrayBuffer();
   rom = new Uint8Array(buf);
   romFileName = file.name || "rom.gba";
+  window.RBEditorFreeSpace?.resetAllocations?.();
 
   resetViewerState(true);
   const exportBtn = document.getElementById("exportRomBtn");
@@ -695,6 +696,7 @@ document.getElementById("clearBtn").addEventListener("click", () => {
   tilesetAssets.clear();
   tilesetAutoMatchCache.clear();
   romTilesetAssetCache.clear();
+  window.RBEditorFreeSpace?.resetAllocations?.();
   document.getElementById("primaryTilesetSelect").innerHTML = '<option value="">未加载 tilesets.zip</option>';
   document.getElementById("secondaryTilesetSelect").innerHTML = '<option value="">未加载 tilesets.zip</option>';
   document.getElementById("tilesetStatus").textContent = "默认优先使用 ROM 内部 tileset 渲染；tilesets.zip 作为调试/备用。";

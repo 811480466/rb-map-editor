@@ -5,8 +5,19 @@
 // 不依赖定时器和内部 active 标记；mode-controller 点击地图连接器时直接调用 render() 即显示。
 
 (function connectorPanelModule() {
+  const MANAGED_CONNECTION_CAPACITY = 6;
+  const MANAGED_CONNECTION_BYTES = MANAGED_CONNECTION_CAPACITY * MAP_CONNECTION_SIZE;
+
   function writeS32LE(off, value) {
     const v = Number(value) | 0;
+    rom[off] = v & 0xFF;
+    rom[off + 1] = (v >> 8) & 0xFF;
+    rom[off + 2] = (v >> 16) & 0xFF;
+    rom[off + 3] = (v >> 24) & 0xFF;
+  }
+
+  function writeU32LE(off, value) {
+    const v = Number(value) >>> 0;
     rom[off] = v & 0xFF;
     rom[off + 1] = (v >> 8) & 0xFF;
     rom[off + 2] = (v >> 16) & 0xFF;
@@ -23,6 +34,103 @@
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     return Math.max(-2147483648, Math.min(2147483647, Math.trunc(n)));
+  }
+
+  function normalizeConnection(conn, fallbackIndex = 0) {
+    return {
+      index: fallbackIndex,
+      direction: normalizeByte(conn?.direction) ?? 4,
+      connectionOffset: normalizeS32(conn?.connectionOffset ?? conn?.offset) ?? 0,
+      mapGroup: normalizeByte(conn?.mapGroup) ?? 0,
+      mapNum: normalizeByte(conn?.mapNum) ?? 0,
+    };
+  }
+
+  function writeConnectionEntry(off, conn) {
+    if (!isValidOffset(off, MAP_CONNECTION_SIZE)) {
+      throw new Error(`MapConnection 写入范围无效：${hex(off)}`);
+    }
+
+    rom[off + 0x00] = conn.direction & 0xFF;
+    rom[off + 0x01] = 0;
+    rom[off + 0x02] = 0;
+    rom[off + 0x03] = 0;
+    writeS32LE(off + 0x04, conn.connectionOffset);
+    rom[off + 0x08] = conn.mapGroup & 0xFF;
+    rom[off + 0x09] = conn.mapNum & 0xFF;
+    rom[off + 0x0A] = 0;
+    rom[off + 0x0B] = 0;
+  }
+
+  function clearConnectionSlots(dataOff) {
+    for (let i = 0; i < MANAGED_CONNECTION_BYTES; i++) {
+      rom[dataOff + i] = 0;
+    }
+  }
+
+  function isManagedConnectionArray(dataOff) {
+    return window.RBEditorFreeSpace?.isInManagedRegion?.(dataOff, MANAGED_CONNECTION_BYTES) === true;
+  }
+
+  function allocateConnectionArray() {
+    const allocator = window.RBEditorFreeSpace;
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用。");
+    return allocator.allocate(MANAGED_CONNECTION_BYTES, { tag: "MapConnection[6]" }).offset;
+  }
+
+  function allocateConnectionsHeader() {
+    const allocator = window.RBEditorFreeSpace;
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用。");
+    return allocator.allocate(MAP_CONNECTIONS_SIZE, { tag: "MapConnections" }).offset;
+  }
+
+  function ensureConnectionsHeader(header, parsed) {
+    if (parsed.offset !== null && parsed.offset !== undefined && isValidOffset(parsed.offset, MAP_CONNECTIONS_SIZE)) {
+      return parsed.offset;
+    }
+
+    const headerOff = allocateConnectionsHeader();
+    writeS32LE(headerOff + 0x00, 0);
+    writeU32LE(headerOff + 0x04, 0);
+    writeU32LE(header.offset + 0x0C, offsetToPtr(headerOff));
+    header.connectionsPtr = offsetToPtr(headerOff);
+    return headerOff;
+  }
+
+  function rewriteConnectionsToManagedArray(header, connections) {
+    if (!header) return null;
+    if (connections.length > MANAGED_CONNECTION_CAPACITY) {
+      throw new Error(`连接数量不能超过 ${MANAGED_CONNECTION_CAPACITY} 条。`);
+    }
+
+    const parsed = parseMapConnections(header.connectionsPtr);
+    const headerOff = ensureConnectionsHeader(header, parsed);
+    const dataOff = isManagedConnectionArray(parsed.dataOff)
+      ? parsed.dataOff
+      : allocateConnectionArray();
+
+    clearConnectionSlots(dataOff);
+    connections.forEach((conn, index) => {
+      writeConnectionEntry(dataOff + index * MAP_CONNECTION_SIZE, normalizeConnection(conn, index));
+    });
+
+    writeS32LE(headerOff + 0x00, connections.length);
+    writeU32LE(headerOff + 0x04, offsetToPtr(dataOff));
+    header.connectionsPtr = offsetToPtr(headerOff);
+    header.connectionsParsed = parseMapConnections(header.connectionsPtr);
+    return header.connectionsParsed;
+  }
+
+  function refreshConnectorViews() {
+    if (!currentMap) return;
+    currentMap.connectionsParsed = parseMapConnections(currentMap.connectionsPtr);
+    renderConnectionEdgeNav(currentMap);
+    if (window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
+      window.RBEditorConnectionPreview.render(currentMap);
+    } else {
+      renderMap(currentMap, currentEvents);
+    }
+    renderConnectorPanel();
   }
 
   function ensurePanel() {
@@ -80,14 +188,48 @@
     rom[conn.offset + 0x08] = mapGroup & 0xFF;
     rom[conn.offset + 0x09] = mapNum & 0xFF;
 
-    currentMap.connectionsParsed = parseMapConnections(currentMap.connectionsPtr);
-    renderConnectionEdgeNav(currentMap);
-    if (currentMap && window.RBEditorState?.mode === "connections" && window.RBEditorConnectionPreview?.render) {
-      window.RBEditorConnectionPreview.render(currentMap);
-    } else if (currentMap) {
-      renderMap(currentMap, currentEvents);
+    refreshConnectorViews();
+  }
+
+  function addConnection() {
+    if (!currentMap) return;
+
+    const parsed = parseMapConnections(currentMap.connectionsPtr);
+    const connections = (parsed.list || []).map(normalizeConnection);
+    if (connections.length >= MANAGED_CONNECTION_CAPACITY) {
+      alert(`连接数量不能超过 ${MANAGED_CONNECTION_CAPACITY} 条。`);
+      return;
     }
-    renderConnectorPanel();
+
+    connections.push({
+      direction: 4,
+      connectionOffset: 0,
+      mapGroup: currentMap.mapGroup ?? 0,
+      mapNum: currentMap.mapNum ?? 0,
+    });
+
+    try {
+      rewriteConnectionsToManagedArray(currentMap, connections);
+      refreshConnectorViews();
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
+  }
+
+  function deleteConnection(index) {
+    if (!currentMap) return;
+    const parsed = parseMapConnections(currentMap.connectionsPtr);
+    const idx = Number(index);
+    const connections = (parsed.list || []).filter(conn => conn.index !== idx).map(normalizeConnection);
+
+    if (!confirm(`确定删除连接 #${idx} 吗？`)) return;
+
+    try {
+      rewriteConnectionsToManagedArray(currentMap, connections);
+      refreshConnectorViews();
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
   }
 
   function renderConnectorPanel() {
@@ -104,6 +246,11 @@
     const parsed = parseMapConnections(currentMap.connectionsPtr);
     currentMap.connectionsParsed = parsed;
     const connections = parsed.list || [];
+    const freeState = window.RBEditorFreeSpace?.getState?.();
+    const managedText = isManagedConnectionArray(parsed.dataOff) ? `managed capacity=${MANAGED_CONNECTION_CAPACITY}` : "not migrated";
+    const largestText = freeState?.largest?.offset !== null && freeState?.largest?.offset !== undefined
+      ? `${hex(freeState.largest.offset)} / ${freeState.largest.size} bytes`
+      : "null";
 
     let html = `
       <h2>地图连接器</h2>
@@ -112,10 +259,16 @@
         <div>mapGroup=${currentMap.mapGroup ?? "?"} / mapNum=${currentMap.mapNum ?? "?"}</div>
         <div>connectionsPtr=${escapeHtml(hex(currentMap.connectionsPtr))}</div>
         <div>header=${parsed.offset !== null && parsed.offset !== undefined ? escapeHtml(hex(parsed.offset)) : "null"} / data=${parsed.dataOff !== null && parsed.dataOff !== undefined ? escapeHtml(hex(parsed.dataOff)) : "null"} / count=${parsed.count} / status=${escapeHtml(parsed.status)}</div>
+        <div>storage=${escapeHtml(managedText)} / freeStart=${escapeHtml(hex(freeState?.start ?? 0))} / largest=${escapeHtml(largestText)}</div>
+      </div>
+      <div class="connector-actions">
+        <button type="button" data-action="add-connector" ${connections.length >= MANAGED_CONNECTION_CAPACITY ? "disabled" : ""}>新增连接</button>
       </div>`;
 
     if (!connections.length) {
       panel.innerHTML = html + `<div class="empty-tip">当前地图没有连接信息。</div>`;
+      const addBtn = panel.querySelector("button[data-action='add-connector']");
+      if (addBtn) addBtn.onclick = addConnection;
       return;
     }
 
@@ -148,11 +301,15 @@
           <div class="connector-actions">
             <button type="button" data-action="save-connector" data-index="${conn.index}">保存修改</button>
             <button type="button" class="secondary-btn" data-action="jump-connector" data-index="${conn.index}" ${info?.targetMap ? "" : "disabled"}>跳转目标地图</button>
+            <button type="button" class="secondary-btn" data-action="delete-connector" data-index="${conn.index}">删除</button>
           </div>
         </div>`;
     }).join("");
 
     panel.innerHTML = html;
+
+    const addBtn = panel.querySelector("button[data-action='add-connector']");
+    if (addBtn) addBtn.onclick = addConnection;
 
     for (const btn of panel.querySelectorAll("button[data-action='save-connector']")) {
       btn.onclick = () => updateConnection(btn.dataset.index);
@@ -164,6 +321,10 @@
         const conn = parsedNow.list.find(c => c.index === Number(btn.dataset.index));
         if (conn) jumpToConnectionTarget(conn);
       };
+    }
+
+    for (const btn of panel.querySelectorAll("button[data-action='delete-connector']")) {
+      btn.onclick = () => deleteConnection(btn.dataset.index);
     }
   }
 
@@ -187,5 +348,8 @@
   window.RBEditorConnectorPanel = {
     render: renderConnectorPanel,
     restore: restoreRightPanel,
+    addConnection,
+    deleteConnection,
+    rewriteConnectionsToManagedArray,
   };
 })();
