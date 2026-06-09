@@ -7,6 +7,8 @@
   let activeTab = "parsed";
   let activeOptions = null;
   let activeAnalysis = null;
+  let navigationHistory = [];
+  let navigationIndex = -1;
 
   function injectStyle() {
     if (document.getElementById("scriptViewerModalStyle")) return;
@@ -130,8 +132,21 @@
       .script-viewer-toolbar {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start !important;
         gap: 8px;
         margin-bottom: 10px;
+      }
+
+      .script-viewer-nav-path {
+        flex: 1 1 320px;
+        min-width: 0;
+        color: #51657f;
+        font-size: 12px;
+        font-family: Consolas, Monaco, monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .script-viewer-pre {
@@ -156,6 +171,71 @@
         font-size: 12px;
         color: #15803d;
       }
+
+      .script-viewer-command-list {
+        min-height: 260px;
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #d7e4f5;
+        border-radius: 10px;
+        background: #0f172a;
+        color: #e5edf7;
+        font-family: Consolas, Monaco, monospace;
+      }
+
+      .script-viewer-command-summary {
+        padding: 10px 12px;
+        border-bottom: 1px solid #263650;
+        color: #a9b9ce;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .script-viewer-command-row {
+        display: grid;
+        grid-template-columns: 38px 72px 86px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: start;
+        padding: 7px 10px;
+        border-bottom: 1px solid #1d2a40;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .script-viewer-command-row:last-child { border-bottom: 0; }
+
+      .script-viewer-command-index,
+      .script-viewer-command-offset,
+      .script-viewer-command-address {
+        color: #8fa4bf;
+        white-space: nowrap;
+      }
+
+      .script-viewer-command-text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .script-viewer-command-decoded {
+        grid-column: 4 / -1;
+        color: #86efac;
+        white-space: pre-wrap;
+      }
+
+      .script-viewer-follow-btn {
+        width: auto !important;
+        min-width: 56px !important;
+        margin: 0 !important;
+        padding: 4px 8px !important;
+        border: 1px solid #4f79b8 !important;
+        border-radius: 6px !important;
+        background: #17345f !important;
+        color: #dbeafe !important;
+        font-size: 11px !important;
+      }
+
+      .script-viewer-follow-btn:hover { background: #24518c !important; }
 
       .script-viewer-inline-actions {
         grid-column: 1 / -1;
@@ -212,9 +292,12 @@
         </div>
         <div class="script-viewer-body">
           <div class="script-viewer-toolbar">
+            <button id="scriptViewerBackBtn" class="script-viewer-action-btn" type="button" title="返回上一个脚本">返回</button>
+            <button id="scriptViewerForwardBtn" class="script-viewer-action-btn" type="button" title="前进到下一个脚本">前进</button>
+            <span id="scriptViewerNavPath" class="script-viewer-nav-path"></span>
             <button id="copyScriptViewerBtn" class="script-viewer-action-btn" type="button">复制当前视图</button>
           </div>
-          <pre id="scriptViewerContent" class="script-viewer-pre"></pre>
+          <div id="scriptViewerContent"></div>
           <div id="scriptViewerStatus" class="script-viewer-status"></div>
         </div>
       </div>
@@ -226,6 +309,13 @@
     });
     document.getElementById("scriptViewerCloseBtn")?.addEventListener("click", closeScriptViewer);
     document.getElementById("copyScriptViewerBtn")?.addEventListener("click", copyCurrentView);
+    document.getElementById("scriptViewerBackBtn")?.addEventListener("click", navigateBack);
+    document.getElementById("scriptViewerForwardBtn")?.addEventListener("click", navigateForward);
+    backdrop.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-script-target-off]");
+      if (!btn) return;
+      navigateToScript(Number(btn.dataset.scriptTargetOff), btn.dataset.scriptTargetLabel || "script");
+    });
     for (const btn of backdrop.querySelectorAll("button[data-script-viewer-tab]")) {
       btn.addEventListener("click", () => {
         activeTab = btn.dataset.scriptViewerTab || "parsed";
@@ -260,10 +350,55 @@
     const modal = ensureModal();
     activeOptions = normalizeOptions(options);
     activeTab = activeOptions.mode === "text" ? "texts" : "parsed";
+    navigationHistory = [];
+    navigationIndex = -1;
+    if (activeOptions.mode !== "text") {
+      navigationHistory.push({
+        off: activeOptions.off,
+        ptr: activeOptions.ptr,
+        label: "主脚本",
+      });
+      navigationIndex = 0;
+    }
     activeAnalysis = activeOptions.mode === "text" ? null : parseScriptBasic(activeOptions.off, { maxCommands: 120, maxBytes: 720 });
 
     modal.classList.add("active");
     renderActiveView();
+  }
+
+  function activateNavigationEntry(entry) {
+    if (!entry || !isValidOffset(entry.off, 1)) return false;
+    activeOptions.off = entry.off;
+    activeOptions.ptr = entry.ptr ?? offsetToPtr(entry.off);
+    activeOptions.sourceLabel = entry.label || "script";
+    activeAnalysis = parseScriptBasic(entry.off, { maxCommands: 120, maxBytes: 720 });
+    activeTab = "parsed";
+    renderActiveView();
+    return true;
+  }
+
+  function navigateToScript(off, label = "script") {
+    if (!isValidOffset(off, 1)) {
+      document.getElementById("scriptViewerStatus").textContent = `目标脚本地址无效：${hex(off)}`;
+      return false;
+    }
+
+    navigationHistory = navigationHistory.slice(0, navigationIndex + 1);
+    navigationHistory.push({ off, ptr: offsetToPtr(off), label });
+    navigationIndex = navigationHistory.length - 1;
+    return activateNavigationEntry(navigationHistory[navigationIndex]);
+  }
+
+  function navigateBack() {
+    if (navigationIndex <= 0) return false;
+    navigationIndex--;
+    return activateNavigationEntry(navigationHistory[navigationIndex]);
+  }
+
+  function navigateForward() {
+    if (navigationIndex < 0 || navigationIndex >= navigationHistory.length - 1) return false;
+    navigationIndex++;
+    return activateNavigationEntry(navigationHistory[navigationIndex]);
   }
 
   function closeScriptViewer() {
@@ -287,11 +422,82 @@
     for (const btn of document.querySelectorAll("button[data-script-viewer-tab]")) {
       btn.classList.toggle("active", btn.dataset.scriptViewerTab === activeTab);
     }
+
+    const path = document.getElementById("scriptViewerNavPath");
+    if (path) {
+      path.textContent = navigationHistory.length
+        ? navigationHistory.slice(0, navigationIndex + 1).map(entry => `${entry.label} ${hex(entry.off)}`).join(" > ")
+        : "";
+      path.title = path.textContent;
+    }
+    const backBtn = document.getElementById("scriptViewerBackBtn");
+    const forwardBtn = document.getElementById("scriptViewerForwardBtn");
+    if (backBtn) backBtn.disabled = navigationIndex <= 0;
+    if (forwardBtn) forwardBtn.disabled = navigationIndex < 0 || navigationIndex >= navigationHistory.length - 1;
   }
 
   function commandLine(cmd, index) {
     const rel = activeOptions?.off !== null && activeOptions?.off !== undefined ? cmd.off - activeOptions.off : 0;
     return `${String(index).padStart(3, "0")}  +${hex(rel, 4)}  ${cmd.offHex}  ${cmd.opcodeHex}  ${cmd.text}`;
+  }
+
+  function getCommandScriptTarget(cmd) {
+    const names = new Set(["goto", "call", "goto_if", "call_if", "vgoto", "vcall"]);
+    if (!cmd || !names.has(cmd.name)) return null;
+    const target = cmd.args?.target || cmd.args?.arg0;
+    if (!target || target.off === null || target.off === undefined) return null;
+    return {
+      off: target.off,
+      ptr: target.ptr,
+      label: cmd.name,
+      valid: isValidOffset(target.off, 1),
+      visited: navigationHistory.some(entry => entry.off === target.off),
+    };
+  }
+
+  function renderParsedView(container) {
+    const analysis = activeAnalysis;
+    container.className = "script-viewer-command-list";
+    container.innerHTML = "";
+
+    if (!analysis || !analysis.ok) {
+      container.innerHTML = `<div class="script-viewer-command-summary">${escapeHtml(analysis?.text || "脚本地址无效或无法解析。")}</div>`;
+      return;
+    }
+
+    const warningText = analysis.warnings?.length
+      ? `\n警告：\n${analysis.warnings.map(w => `- ${w}`).join("\n")}`
+      : "";
+    const summary = document.createElement("div");
+    summary.className = "script-viewer-command-summary";
+    summary.textContent =
+      `入口：${analysis.entryOffHex} / ${analysis.entryPtrHex}\n` +
+      `命令：${analysis.commandCount}    字节：${analysis.consumedBytes}${warningText}`;
+    container.appendChild(summary);
+
+    analysis.commands.forEach((cmd, index) => {
+      const target = getCommandScriptTarget(cmd);
+      const row = document.createElement("div");
+      row.className = "script-viewer-command-row";
+      const rel = activeOptions?.off !== null && activeOptions?.off !== undefined ? cmd.off - activeOptions.off : 0;
+      row.innerHTML = `
+        <span class="script-viewer-command-index">${String(index).padStart(3, "0")}</span>
+        <span class="script-viewer-command-offset">+${hex(rel, 4)}</span>
+        <span class="script-viewer-command-address">${cmd.offHex}</span>
+        <span class="script-viewer-command-text">${escapeHtml(cmd.text)}</span>
+        ${target
+          ? `<button class="script-viewer-follow-btn" type="button" data-script-target-off="${target.off}" data-script-target-label="${escapeHtml(target.label)}" ${target.valid ? "" : "disabled"}>${target.visited ? "再次进入" : "进入"}</button>`
+          : "<span></span>"}
+      `;
+      const decoded = getCommandDecodedText(cmd);
+      if (decoded) {
+        const text = document.createElement("div");
+        text.className = "script-viewer-command-decoded";
+        text.textContent = `text: ${decoded}`;
+        row.appendChild(text);
+      }
+      container.appendChild(row);
+    });
   }
 
   function renderParsedText() {
@@ -400,8 +606,13 @@
   function renderActiveView() {
     if (!activeOptions) return;
     renderHeader();
-    const content = getActiveContent();
-    document.getElementById("scriptViewerContent").textContent = content;
+    const contentEl = document.getElementById("scriptViewerContent");
+    if (activeTab === "parsed" && activeOptions.mode !== "text") {
+      renderParsedView(contentEl);
+    } else {
+      contentEl.className = "script-viewer-pre";
+      contentEl.textContent = getActiveContent();
+    }
     document.getElementById("scriptViewerStatus").textContent = "";
   }
 

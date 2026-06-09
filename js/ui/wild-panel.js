@@ -199,9 +199,9 @@
       : "当前地图已有野生遭遇 Header，但这个类型为空。添加后会写入对应 WildMonInfo / WildPokemon，并更新当前 Header 指针。";
     const checks = mode === "map"
       ? `<div class="wild-create-checks">
-          ${GROUP_ORDER.map((g, i) => `<label><input type="checkbox" data-create-group="${g.key}" ${i === 0 ? "checked" : ""}>${g.label}</label>`).join("")}
+          ${GROUP_ORDER.map((g, i) => `<label><input type="checkbox" style="width: 30px !important; data-create-group="${g.key}" ${i === 0 ? "checked" : ""}>${g.label}</label>`).join("")}
         </div>`
-      : `<input type="hidden" data-create-group="${groupKey}" checked>`;
+      : `<input type="hidden" data-create-group="${groupKey}" checked">`;
 
     return `
       <div class="wild-create-box" data-create-mode="${mode}" data-create-kind="${groupKey}">

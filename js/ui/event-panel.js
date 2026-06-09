@@ -25,6 +25,21 @@
         color: #163c7a;
       }
 
+      .event-panel-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .event-warp-capacity {
+        color: #566b88;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
       .event-summary-filter {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -68,6 +83,16 @@
         border-color: #1f5fbf;
         color: #fff;
         font-weight: 700;
+      }
+
+      .event-danger-btn {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        color: #b91c1c;
+        border-radius: 7px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
       }
 
       .event-primary-btn:disabled,
@@ -286,6 +311,14 @@
     }
   }
 
+  function getWarpCapacityInfo(events) {
+    const manager = window.RBEditorWarpEventManager;
+    const capacity = manager?.MANAGED_WARP_CAPACITY ?? 10;
+    const storage = currentMap && manager?.getStorageInfo ? manager.getStorageInfo(currentMap) : null;
+    const count = storage?.count ?? countEvents(events || []).warp;
+    return { count, capacity };
+  }
+
   function eventRowHtml(ev) {
     let title = `${eventBadge(ev)} #${ev.index} (${ev.x}, ${ev.y})`;
 
@@ -324,16 +357,22 @@
   function renderListView(events) {
     const eventTab = getEventTab();
     if (!eventTab) return;
+    const warpCapacity = getWarpCapacityInfo(events);
 
     eventTab.innerHTML = `
       <div class="event-panel-header">
         <div class="event-panel-title">事件列表</div>
+        <div class="event-panel-header-actions">
+          <span class="event-warp-capacity">传送点：${escapeHtml(warpCapacity.count)} / 最大 ${escapeHtml(warpCapacity.capacity)}</span>
+          <button id="addWarpEventBtn" class="event-primary-btn" type="button" ${warpCapacity.count >= warpCapacity.capacity ? "disabled" : ""}>新增传送点</button>
+        </div>
       </div>
       <div id="eventSummary"></div>
       <div id="eventList"></div>
     `;
 
     renderEventSummary(events);
+    document.getElementById("addWarpEventBtn")?.addEventListener("click", addWarpEvent);
 
     const list = document.getElementById("eventList");
     const rows = filterEvents(events);
@@ -501,6 +540,7 @@
       <div class="event-actions">
         <button id="applyEventEditBtn" class="event-primary-btn" type="button">应用修改</button>
         <button id="resetEventEditBtn" class="event-secondary-btn" type="button">撤销修改</button>
+        ${ev.type === "warp" ? `<button id="deleteWarpEventBtn" class="event-danger-btn" type="button">删除传送点</button>` : ""}
       </div>
       <div id="eventEditStatus" class="event-edit-status"></div>
       <details class="event-debug">
@@ -513,6 +553,7 @@
     document.getElementById("eventBackToListBtn")?.addEventListener("click", clearSelectedEvent);
     document.getElementById("applyEventEditBtn")?.addEventListener("click", () => applyEventEdit(ev));
     document.getElementById("resetEventEditBtn")?.addEventListener("click", () => renderDetailView(ev));
+    document.getElementById("deleteWarpEventBtn")?.addEventListener("click", () => deleteWarpEvent(ev));
 
     for (const input of eventTab.querySelectorAll(".event-edit-input")) {
       input.addEventListener("input", () => setEditStatus("未应用修改。", ""));
@@ -698,6 +739,66 @@
     } else {
       selectedEventKey = null;
       renderListView(currentEvents || []);
+    }
+  }
+
+  function refreshAfterWarpArrayChange(focusWarpIndex = null) {
+    if (currentMap && typeof loadMapEvents === "function") {
+      currentEvents = loadMapEvents(currentMap);
+    }
+
+    if (currentMap && typeof renderMap === "function") {
+      renderMap(currentMap, currentEvents);
+    }
+
+    if (focusWarpIndex !== null) {
+      const ev = (currentEvents || []).find(e => e.type === "warp" && e.index === focusWarpIndex);
+      if (ev) {
+        selectedEventKey = eventKey(ev);
+        renderDetailView(ev);
+        setEditStatus("已新增传送点。点击左上角“导出”保存到文件。", "ok");
+        return;
+      }
+    }
+
+    selectedEventKey = null;
+    renderListView(currentEvents || []);
+  }
+
+  function addWarpEvent() {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      const manager = window.RBEditorWarpEventManager;
+      if (!manager?.addWarpEvent) throw new Error("Warp 管理器不可用。");
+      const index = manager.addWarpEvent(currentMap);
+      refreshAfterWarpArrayChange(index);
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
+  }
+
+  function deleteWarpEvent(ev) {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!ev || ev.type !== "warp") throw new Error("当前选中的不是传送点。");
+      const manager = window.RBEditorWarpEventManager;
+      if (!manager?.deleteWarpEvent) throw new Error("Warp 管理器不可用。");
+      const refs = manager.findIncomingWarpReferences?.(currentMap, ev.index) || [];
+      const deletedRefs = refs.filter(ref => ref.relation === "deleted").length;
+      const shiftedRefs = refs.filter(ref => ref.relation === "shifted").length;
+      const warning = deletedRefs
+        ? `\n注意：有 ${deletedRefs} 个传送点正好指向被删除的 Warp，删除后需要重新确认它们的目标。`
+        : "";
+      if (!confirm(`确定删除传送点 #${ev.index} 吗？\n将自动修正 ${shiftedRefs} 个指向后续 Warp 的 warpId。${warning}`)) return;
+      const result = manager.deleteWarpEvent(currentMap, ev.index);
+      refreshAfterWarpArrayChange(null);
+      if (result?.deletedRefs) {
+        alert(`删除完成，并修正了 ${result.shiftedRefs} 个后续 warpId。\n仍有 ${result.deletedRefs} 个引用原本指向被删除的 Warp，请重新检查目标。`);
+      }
+    } catch (err) {
+      setEditStatus(err?.message || String(err), "error");
     }
   }
 

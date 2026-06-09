@@ -28,7 +28,7 @@
 
     .app {
       display: grid;
-      grid-template-columns: 380px minmax(520px, 1fr) 480px;
+      grid-template-columns: 260px minmax(520px, 1fr) 360px;
       height: 100vh;
       overflow: hidden;
     }
@@ -43,6 +43,25 @@
     .right {
       border-right: none;
       border-left: 1px solid var(--border);
+    }
+
+    .app > .panel:first-child {
+      padding: 10px;
+    }
+
+    .app > .panel:first-child .panel-header {
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .app > .panel:first-child .map-option {
+      padding: 8px;
+      margin: 6px 0;
+    }
+
+    .app > .panel:first-child .map-option-meta {
+      gap: 3px 5px;
+      font-size: 11px;
     }
 
     h2 {

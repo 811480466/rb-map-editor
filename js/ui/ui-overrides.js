@@ -60,8 +60,8 @@
       item.innerHTML = `
         <div class="map-option-name">${escapeHtml(mapName)}</div>
         <div class="map-option-meta">
-          <span class="map-meta-chip">mapNum:${escapeHtml(h.mapNum ?? "?")}</span>
           <span class="map-meta-chip">mapGroup:${escapeHtml(h.mapGroup ?? "?")}</span>
+          <span class="map-meta-chip">mapNum:${escapeHtml(h.mapNum ?? "?")}</span>
           <span class="map-meta-chip">地图编码:${escapeHtml(h.id ?? "?")}</span>
           <span class="map-meta-chip">区域编码:${escapeHtml(h.regionMap?.id ?? "?")}</span>
         </div>`;

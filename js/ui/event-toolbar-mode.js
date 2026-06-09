@@ -1,7 +1,7 @@
 // ============================================================
 // Event toolbar mode
 // ============================================================
-// 地图事件模式下，顶部工具栏只显示“网格”开关。
+// 地图事件模式隐藏鼠标模式；地图连接器模式只显示“网格”开关。
 
 (function eventToolbarModeModule() {
   function getActiveMode() {
@@ -17,18 +17,29 @@
     const toolbar = document.getElementById("mapToolbar");
     const title = toolbar?.querySelector(".map-toolbar-title");
     const mouseModeGroup = document.getElementById("mouseModeGroup");
+    const movementRangeOption = document.getElementById("movementRangeToggle")?.closest(".map-toolbar-option");
 
     if (!toolbar) return;
+
+    if (mode === "connections") {
+      setDisplay(title, "none");
+      setDisplay(mouseModeGroup, "none");
+      setDisplay(movementRangeOption, "none");
+      toolbar.style.display = "flex";
+      return;
+    }
 
     if (mode === "events") {
       setDisplay(title, "none");
       setDisplay(mouseModeGroup, "none");
+      setDisplay(movementRangeOption, "");
       toolbar.style.display = "flex";
       return;
     }
 
     setDisplay(title, "");
     setDisplay(mouseModeGroup, "");
+    setDisplay(movementRangeOption, "none");
   }
 
   document.addEventListener("click", (e) => {
