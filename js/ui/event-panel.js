@@ -489,6 +489,38 @@
     `;
   }
 
+  function enhanceWarpInputs(ev) {
+    if (!ev || ev.type !== "warp") return;
+    const mapGroupInput = document.querySelector('#eventTab input[data-event-field="mapGroup"]');
+    const mapNumInput = document.querySelector('#eventTab input[data-event-field="mapNum"]');
+    const warpIdInput = document.querySelector('#eventTab input[data-event-field="warpId"]');
+    if (!mapGroupInput || !mapNumInput || !warpIdInput) return;
+
+    for (const input of [mapGroupInput, mapNumInput, warpIdInput]) {
+      input.type = "number";
+      input.step = "1";
+      input.min = "0";
+      input.max = "255";
+    }
+
+    function updateWarpIdRange() {
+      const group = Number(mapGroupInput.value);
+      const mapNum = Number(mapNumInput.value);
+      const targetMap = Number.isInteger(group) && Number.isInteger(mapNum) ? findMapByGroupNum(group, mapNum) : null;
+      const targetWarpCount = targetMap ? loadMapEvents(targetMap).filter(item => item.type === "warp").length : 0;
+      const maxWarpId = targetWarpCount > 0 ? targetWarpCount - 1 : 255;
+      warpIdInput.max = String(maxWarpId);
+      warpIdInput.title = targetMap
+        ? `目标地图 Warp 范围：0 ~ ${maxWarpId}`
+        : "未找到目标地图，允许临时填写 0 ~ 255";
+      warpIdInput.placeholder = targetMap ? `0 ~ ${maxWarpId}` : "0 ~ 255";
+    }
+
+    mapGroupInput.addEventListener("input", updateWarpIdRange);
+    mapNumInput.addEventListener("input", updateWarpIdRange);
+    updateWarpIdRange();
+  }
+
   function renderBgFields(ev) {
     let body = "";
     body += inputField("kind", "kind", ev.kind, { hint: "u8" });
@@ -558,6 +590,7 @@
     for (const input of eventTab.querySelectorAll(".event-edit-input")) {
       input.addEventListener("input", () => setEditStatus("未应用修改。", ""));
     }
+    enhanceWarpInputs(ev);
 
     const jumpBtn = document.getElementById("jumpWarpTargetBtn");
     const jumpFocusBtn = document.getElementById("jumpWarpTargetFocusBtn");
