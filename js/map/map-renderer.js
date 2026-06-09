@@ -202,13 +202,13 @@ function renderWarpTools(ev) {
     : `group=${ev.mapGroup}, map=${ev.mapNum}`;
 
   const targetWarpText = targetWarp
-    ? `#${targetWarp.index} (${targetWarp.x}, ${targetWarp.y}) elevation=${targetWarp.elevation}`
-    : `未找到目标 warp index=${ev.warpId}`;
+    ? `warpId=${info.targetWarpId} (${targetWarp.x}, ${targetWarp.y}) elevation=${targetWarp.elevation}`
+    : `未找到目标 Warp warpId=${ev.warpId}`;
 
   const reverseText = info?.exactReverseWarp
-    ? `精确返回 warp：#${info.exactReverseWarp.index} (${info.exactReverseWarp.x}, ${info.exactReverseWarp.y}) -> 当前 #${ev.index}`
+    ? `精确返回 Warp：warpId=${info.exactReverseWarp.warpId} (${info.exactReverseWarp.x}, ${info.exactReverseWarp.y}) -> 当前 Warp 槽位 ${info.sourceWarpSlot}`
     : (info?.reverseWarps?.length
-      ? `返回当前地图的候选：${info.reverseWarps.map(w => `#${w.index}(${w.x},${w.y})->warpId=${w.warpId}`).join("，")}`
+      ? `返回当前地图的候选：${info.reverseWarps.map(w => `Warp(${w.x},${w.y})->warpId=${w.warpId}`).join("，")}`
       : "没有找到返回当前地图的 warp");
 
   box.className = "warp-tools";
@@ -396,7 +396,7 @@ function formatEventForDisplay(ev) {
       size: `${warpInfo.targetMap.layout.width}x${warpInfo.targetMap.layout.height}`,
     } : null;
     copy.targetWarp = warpInfo?.targetWarp ? {
-      index: warpInfo.targetWarp.index,
+      targetWarpId: warpInfo.targetWarpId,
       x: warpInfo.targetWarp.x,
       y: warpInfo.targetWarp.y,
       elevation: warpInfo.targetWarp.elevation,
@@ -409,7 +409,7 @@ function formatEventForDisplay(ev) {
       status: warpInfo.status,
       statusText: warpInfo.statusText,
       reverseWarpCount: warpInfo.reverseWarps.length,
-      exactReverseWarpIndex: warpInfo.exactReverseWarp ? warpInfo.exactReverseWarp.index : null,
+      exactReverseWarpId: warpInfo.exactReverseWarp ? warpInfo.exactReverseWarp.warpId : null,
     } : null;
   }
 

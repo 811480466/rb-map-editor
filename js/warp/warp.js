@@ -238,22 +238,34 @@ function getWarpEventsForMap(header) {
   return loadMapEvents(header).filter(ev => ev.type === "warp");
 }
 
+function getWarpSlotId(ev, header) {
+  const warpOff = header?.events?.warpOff;
+  if (!ev || !Number.isInteger(ev.offset) || !Number.isInteger(warpOff)) return null;
+  const relative = ev.offset - warpOff;
+  if (relative < 0 || relative % WARP_EVENT_SIZE !== 0) return null;
+  const slotId = relative / WARP_EVENT_SIZE;
+  return slotId >= 0 && slotId < (header.events?.warpCount ?? 0) ? slotId : null;
+}
+
 function getWarpDestinationInfo(ev, fromHeader = currentMap) {
   if (!ev || ev.type !== "warp") return null;
 
   const targetMap = findMapByGroupNum(ev.mapGroup, ev.mapNum);
   const targetWarps = targetMap ? getWarpEventsForMap(targetMap) : [];
-  const targetWarp = targetWarps.find(w => w.index === ev.warpId) || null;
+  const targetWarp = targetWarps[ev.warpId] || null;
 
   const fromGroup = fromHeader?.mapGroup;
   const fromNum = fromHeader?.mapNum;
+  const sourceWarpSlot = getWarpSlotId(ev, fromHeader);
   const reverseWarps = targetWarps.filter(w =>
     fromGroup !== undefined &&
     fromNum !== undefined &&
     w.mapGroup === fromGroup &&
     w.mapNum === fromNum
   );
-  const exactReverseWarp = reverseWarps.find(w => w.warpId === ev.index) || null;
+  const exactReverseWarp = sourceWarpSlot !== null
+    ? reverseWarps.find(w => w.warpId === sourceWarpSlot) || null
+    : null;
 
   let status = "unknown";
   let statusText = "未能判断";
@@ -263,13 +275,13 @@ function getWarpDestinationInfo(ev, fromHeader = currentMap) {
     statusText = "目标地图不存在 / gMapGroups 未命中";
   } else if (!targetWarp) {
     status = "warn";
-    statusText = `目标地图存在，但没有 index=${ev.warpId} 的目标 warp`;
+    statusText = `目标地图存在，但没有 warpId=${ev.warpId} 的目标 Warp`;
   } else if (exactReverseWarp) {
     status = "ok";
-    statusText = `双向匹配：目标 warp #${exactReverseWarp.index} 会返回当前地图 warp #${ev.index}`;
+    statusText = `双向匹配：目标 Warp 的 warpId=${exactReverseWarp.warpId} 会返回当前 Warp 槽位 ${sourceWarpSlot}`;
   } else if (reverseWarps.length) {
     status = "warn";
-    statusText = `目标地图有 ${reverseWarps.length} 个 warp 返回当前地图，但 warpId 没有精确指回 #${ev.index}`;
+    statusText = `目标地图有 ${reverseWarps.length} 个 Warp 返回当前地图，但 warpId 没有精确指回当前 Warp 槽位 ${sourceWarpSlot}`;
   } else {
     status = "warn";
     statusText = "疑似单向 warp：目标地图没有返回当前地图的 warp";
@@ -280,6 +292,8 @@ function getWarpDestinationInfo(ev, fromHeader = currentMap) {
     targetMap,
     targetWarps,
     targetWarp,
+    sourceWarpSlot,
+    targetWarpId: ev.warpId,
     reverseWarps,
     exactReverseWarp,
     status,
@@ -318,6 +332,6 @@ function jumpToWarpTarget(ev, focusTargetWarp = true) {
   return selectHeader(
     info.targetMap,
     true,
-    focusTargetWarp && info.targetWarp ? (targetEv => targetEv.type === "warp" && targetEv.index === info.targetWarp.index) : null
+    focusTargetWarp && info.targetWarp ? (targetEv => targetEv.type === "warp" && targetEv.offset === info.targetWarp.offset) : null
   );
 }
