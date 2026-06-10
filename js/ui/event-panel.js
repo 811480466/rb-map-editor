@@ -1013,6 +1013,66 @@
     return objects.length - 1;
   }
 
+  function findGlobalObjectFlagRefs(flagId) {
+    const id = Number(flagId);
+    if (!Number.isInteger(id)) return [];
+    const refs = [];
+    const headers = Array.isArray(mapHeaders) ? mapHeaders : [];
+
+    for (const header of headers) {
+      if (!header?.events) continue;
+      let events = [];
+      try {
+        events = loadMapEvents(header);
+      } catch (err) {
+        continue;
+      }
+
+      for (const ev of events) {
+        if (ev.type !== "object" || ev.flagId !== id) continue;
+        refs.push({ header, event: ev });
+      }
+    }
+
+    return refs;
+  }
+
+  function assertNewObjectFlagAvailable(flagId) {
+    const id = Number(flagId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error("事件Flag 必须大于 0。");
+    }
+
+    const refs = findGlobalObjectFlagRefs(id);
+    if (!refs.length) return;
+
+    const first = refs[0];
+    const mapName = first.header ? getMapDisplayNameWithCode(first.header) : "未知地图";
+    throw new Error(`事件Flag ${id} 已被全局对象使用：${mapName} / OBJ #${first.event.index}。请换一个未使用的 Flag。`);
+  }
+
+  function getNextAvailableGlobalObjectFlag() {
+    const used = new Set();
+    const headers = Array.isArray(mapHeaders) ? mapHeaders : [];
+    for (const header of headers) {
+      if (!header?.events) continue;
+      let events = [];
+      try {
+        events = loadMapEvents(header);
+      } catch (err) {
+        continue;
+      }
+      for (const ev of events) {
+        if (ev.type === "object" && Number.isInteger(ev.flagId) && ev.flagId > 0) used.add(ev.flagId);
+      }
+    }
+
+    for (let id = 1; id <= 0xFFFF; id++) {
+      if (!used.has(id)) return id;
+    }
+    throw new Error("没有可用的全局对象事件Flag。");
+  }
+
   const TRAINER_SCRIPT_TEMPLATES = {
     simpleSingle: {
       name: "简易单打训练家",
@@ -1243,7 +1303,7 @@
               <label class="event-field-label" for="addObjectElevation">高度/层级</label>
               <input id="addObjectElevation" class="event-edit-input" type="number" min="0" max="255" step="1" />
               <label class="event-field-label" for="addObjectFlagId">事件Flag</label>
-              <input id="addObjectFlagId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+              <input id="addObjectFlagId" class="event-edit-input" type="number" min="1" max="65535" step="1" />
               <label class="event-field-label" for="addObjectItemId">道具ID</label>
               <input id="addObjectItemId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
             </div>
@@ -1268,6 +1328,7 @@
       saveNewObjectEvent();
     });
     modal.querySelector("#addObjectTemplate").addEventListener("change", updateAddObjectTemplateStatus);
+    modal.querySelector("#addObjectFlagId").addEventListener("input", validateAddObjectFlagInput);
     return modal;
   }
 
@@ -1292,6 +1353,26 @@
     setAddObjectStatus(template.description);
   }
 
+  function validateAddObjectFlagInput() {
+    const raw = document.getElementById("addObjectFlagId")?.value;
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0 || id > 0xFFFF) {
+      setAddObjectStatus("事件Flag 必须是 1 ~ 65535 的整数。", true);
+      return false;
+    }
+
+    const refs = findGlobalObjectFlagRefs(id);
+    if (refs.length) {
+      const first = refs[0];
+      const mapName = first.header ? getMapDisplayNameWithCode(first.header) : "未知地图";
+      setAddObjectStatus(`事件Flag ${id} 已被使用：${mapName} / OBJ #${first.event.index}。`, true);
+      return false;
+    }
+
+    setAddObjectStatus(`事件Flag ${id} 当前未被全局对象使用。`);
+    return true;
+  }
+
   function openAddObjectModal() {
     try {
       if (!rom) throw new Error("尚未加载 ROM。");
@@ -1309,9 +1390,9 @@
       modal.querySelector("#addObjectX").value = String(Math.floor((currentMap.layout?.width ?? 0) / 2));
       modal.querySelector("#addObjectY").value = String(Math.floor((currentMap.layout?.height ?? 0) / 2));
       modal.querySelector("#addObjectElevation").value = "3";
-      modal.querySelector("#addObjectFlagId").value = "0";
+      modal.querySelector("#addObjectFlagId").value = String(getNextAvailableGlobalObjectFlag());
       modal.querySelector("#addObjectItemId").value = "1";
-      updateAddObjectTemplateStatus();
+      validateAddObjectFlagInput();
       modal.classList.add("show");
       modal.setAttribute("aria-hidden", "false");
       modal.querySelector("#addObjectX").focus();
@@ -1337,10 +1418,11 @@
         x: parseNum(modal.querySelector("#addObjectX")?.value, "坐标 X", -32768, 32767),
         y: parseNum(modal.querySelector("#addObjectY")?.value, "坐标 Y", -32768, 32767),
         elevation: parseNum(modal.querySelector("#addObjectElevation")?.value, "高度/层级", 0, 0xFF),
-        flagId: parseNum(modal.querySelector("#addObjectFlagId")?.value, "事件Flag", 0, 0xFFFF),
+        flagId: parseNum(modal.querySelector("#addObjectFlagId")?.value, "事件Flag", 1, 0xFFFF),
         itemId: parseNum(modal.querySelector("#addObjectItemId")?.value, "道具ID", 0, 0xFFFF),
         quantity: 1,
       };
+      assertNewObjectFlagAvailable(values.flagId);
 
       const index = addObjectEventToMap(sourceMap, values);
       closeAddObjectModal();
