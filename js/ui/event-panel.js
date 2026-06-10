@@ -79,7 +79,19 @@
         white-space: nowrap;
       }
 
+      #addObjectEventBtn {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+        padding: 7px 12px;
+        white-space: nowrap;
+      }
+
       .warp-create-modal {
+        max-width: 520px;
+      }
+
+      .object-create-modal {
         max-width: 520px;
       }
 
@@ -87,6 +99,7 @@
         max-width: 560px;
       }
 
+      .object-create-modal form,
       .warp-create-modal form,
       .trainer-create-modal form {
         min-height: 0;
@@ -95,6 +108,7 @@
         flex-direction: column;
       }
 
+      .object-create-modal .event-field-grid,
       .warp-create-modal .event-field-grid,
       .trainer-create-modal .event-field-grid {
         grid-template-columns: 110px minmax(0, 1fr);
@@ -106,6 +120,7 @@
         font-family: Consolas, Monaco, monospace;
       }
 
+      .object-create-status,
       .warp-create-status,
       .trainer-create-status {
         min-height: 20px;
@@ -114,6 +129,7 @@
         font-size: 12px;
       }
 
+      .object-create-status.error,
       .warp-create-status.error,
       .trainer-create-status.error {
         color: #dc2626;
@@ -432,14 +448,18 @@
     const trainerActions = eventTypeFilter === "trainer"
       ? `<button id="addTrainerEventBtn" class="event-primary-btn" type="button">新增训练家</button>`
       : "";
+    const objectActions = eventTypeFilter === "object"
+      ? `<button id="addObjectEventBtn" class="event-primary-btn" type="button">新增对象</button>`
+      : "";
 
     eventTab.innerHTML = `
       <div id="eventSummary"></div>
-      <div class="event-tab-actions">${warpActions}${trainerActions}</div>
+      <div class="event-tab-actions">${objectActions}${warpActions}${trainerActions}</div>
       <div id="eventList"></div>
     `;
 
     renderEventSummary(events);
+    document.getElementById("addObjectEventBtn")?.addEventListener("click", openAddObjectModal);
     document.getElementById("addWarpEventBtn")?.addEventListener("click", openAddWarpModal);
     document.getElementById("addTrainerEventBtn")?.addEventListener("click", openAddTrainerModal);
 
@@ -921,7 +941,101 @@
     throw new Error("当前地图没有可用 localId。");
   }
 
-  function buildTrainerBattleScript(values, introPtr, defeatPtr, postBattlePtr) {
+  const OBJECT_SCRIPT_TEMPLATES = {
+    itemPickup: {
+      name: "道具拾取",
+      description: "写入道具球对象脚本：设置道具ID和数量后调用 Std_FindItem。",
+      build(values) {
+        return buildItemPickupScript(values.itemId, values.quantity ?? 1);
+      },
+      objectDefaults: {
+        graphicsId: 0x3B,
+        movementType: 0x01,
+        trainerType: 0,
+        trainerRange: 0,
+      },
+    },
+  };
+
+  function getObjectScriptTemplate(templateId) {
+    return OBJECT_SCRIPT_TEMPLATES[templateId] || OBJECT_SCRIPT_TEMPLATES.itemPickup;
+  }
+
+  function renderObjectTemplateOptions(currentValue = "itemPickup") {
+    return Object.entries(OBJECT_SCRIPT_TEMPLATES).map(([id, template]) => {
+      const selected = id === currentValue ? " selected" : "";
+      return `<option value="${escapeHtml(id)}"${selected}>${escapeHtml(template.name)}</option>`;
+    }).join("");
+  }
+
+  function buildItemPickupScript(itemId, quantity = 1) {
+    const item = Number(itemId) & 0xFFFF;
+    const qty = Number(quantity) & 0xFFFF;
+    return [
+      0x1A, 0x00, 0x80, item & 0xFF, (item >> 8) & 0xFF,
+      0x1A, 0x01, 0x80, qty & 0xFF, (qty >> 8) & 0xFF,
+      0x09, 0x01,
+      0x02,
+    ];
+  }
+
+  function addObjectEventToMap(header, values) {
+    if (!rom) throw new Error("尚未加载 ROM。");
+    if (!header) throw new Error("请先选择地图。");
+
+    const objects = loadMapEvents(header).filter(ev => ev.type === "object").map(normalizeObjectEvent);
+    const capacity = getObjectWritableCapacity(header, objects.length);
+    if (objects.length >= capacity) throw new Error(`当前地图对象已达最大数量 ${capacity}。`);
+
+    const template = getObjectScriptTemplate(values.templateId);
+    const defaults = template.objectDefaults || {};
+    const scriptOff = allocateBytes(template.build(values), `ObjectScript:${values.templateId || "itemPickup"}`);
+
+    objects.push({
+      localId: values.localId,
+      graphicsId: defaults.graphicsId ?? 0,
+      inConnection: 0,
+      padding03: 0,
+      x: values.x,
+      y: values.y,
+      elevation: values.elevation,
+      movementType: defaults.movementType ?? 0,
+      movementRangeX: 0,
+      movementRangeY: 0,
+      trainerType: defaults.trainerType ?? 0,
+      trainerRange: defaults.trainerRange ?? 0,
+      scriptPtr: offsetToPtr(scriptOff),
+      flagId: values.flagId,
+      padding16: 0,
+    });
+
+    rewriteObjectArray(header, objects, { capacity });
+    return objects.length - 1;
+  }
+
+  const TRAINER_SCRIPT_TEMPLATES = {
+    simpleSingle: {
+      name: "简易单打训练家",
+      description: "trainerbattle type=0，战斗后显示一段自动关闭对话。",
+      textFields: ["introText", "defeatText", "postBattleText"],
+      build(values, pointers) {
+        return buildSimpleSingleTrainerScript(values, pointers.introPtr, pointers.defeatPtr, pointers.postBattlePtr);
+      },
+    },
+  };
+
+  function getTrainerScriptTemplate(templateId) {
+    return TRAINER_SCRIPT_TEMPLATES[templateId] || TRAINER_SCRIPT_TEMPLATES.simpleSingle;
+  }
+
+  function renderTrainerTemplateOptions(currentValue = "simpleSingle") {
+    return Object.entries(TRAINER_SCRIPT_TEMPLATES).map(([id, template]) => {
+      const selected = id === currentValue ? " selected" : "";
+      return `<option value="${escapeHtml(id)}"${selected}>${escapeHtml(template.name)}</option>`;
+    }).join("");
+  }
+
+  function buildSimpleSingleTrainerScript(values, introPtr, defeatPtr, postBattlePtr) {
     const bytes = new Array(23).fill(0);
     bytes[0] = 0x5C;
     bytes[1] = 0;
@@ -958,6 +1072,7 @@
     const capacity = getObjectWritableCapacity(header, objects.length);
     if (objects.length >= capacity) throw new Error(`当前地图对象已达最大数量 ${capacity}。`);
 
+    const template = getTrainerScriptTemplate(values.templateId);
     const introBytes = encodePokemonEnglishText(values.introText || "...");
     const defeatBytes = encodePokemonEnglishText(values.defeatText || "...");
     const postBattleBytes = encodePokemonEnglishText(values.postBattleText || values.defeatText || "...");
@@ -965,8 +1080,12 @@
     const defeatOff = allocateBytes(defeatBytes, "TrainerDefeatText");
     const postBattleOff = allocateBytes(postBattleBytes, "TrainerPostBattleText");
     const scriptOff = allocateBytes(
-      buildTrainerBattleScript(values, offsetToPtr(introOff), offsetToPtr(defeatOff), offsetToPtr(postBattleOff)),
-      "TrainerBattleScript"
+      template.build(values, {
+        introPtr: offsetToPtr(introOff),
+        defeatPtr: offsetToPtr(defeatOff),
+        postBattlePtr: offsetToPtr(postBattleOff),
+      }),
+      `TrainerBattleScript:${values.templateId || "simpleSingle"}`
     );
 
     objects.push({
@@ -1071,6 +1190,166 @@
     renderListView(currentEvents || []);
   }
 
+  function refreshAfterObjectArrayChange(focusObjectIndex = null) {
+    if (currentMap && typeof loadMapEvents === "function") {
+      currentEvents = loadMapEvents(currentMap);
+    }
+
+    if (currentMap && typeof renderMap === "function") {
+      renderMap(currentMap, currentEvents);
+    }
+
+    eventTypeFilter = "object";
+    if (focusObjectIndex !== null) {
+      const ev = (currentEvents || []).find(e => e.type === "object" && e.index === focusObjectIndex);
+      if (ev) {
+        selectedEventKey = eventKey(ev);
+        renderDetailView(ev);
+        setEditStatus("已新增对象。点击左上角“导出”保存到文件。", "ok");
+        return;
+      }
+    }
+
+    selectedEventKey = null;
+    renderListView(currentEvents || []);
+  }
+
+  function ensureAddObjectModal() {
+    let modal = document.getElementById("addObjectModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "addObjectModal";
+    modal.className = "modal-backdrop";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = `
+      <div class="modal object-create-modal" role="dialog" aria-modal="true" aria-labelledby="addObjectModalTitle">
+        <div class="modal-header">
+          <div>
+            <h2 id="addObjectModalTitle" class="modal-title">新增对象</h2>
+            <div id="addObjectModalSubtitle" class="modal-subtitle"></div>
+          </div>
+          <button type="button" class="modal-close" data-action="close-add-object" aria-label="关闭">×</button>
+        </div>
+        <form id="addObjectForm">
+          <div class="modal-body">
+            <div class="event-field-grid">
+              <label class="event-field-label" for="addObjectTemplate">对象模板</label>
+              <select id="addObjectTemplate" class="event-edit-input">${renderObjectTemplateOptions("itemPickup")}</select>
+              <label class="event-field-label" for="addObjectX">坐标 X</label>
+              <input id="addObjectX" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addObjectY">坐标 Y</label>
+              <input id="addObjectY" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addObjectElevation">高度/层级</label>
+              <input id="addObjectElevation" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addObjectFlagId">事件Flag</label>
+              <input id="addObjectFlagId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+              <label class="event-field-label" for="addObjectItemId">道具ID</label>
+              <input id="addObjectItemId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+            </div>
+            <div id="addObjectStatus" class="object-create-status"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="secondary-btn" data-action="cancel-add-object">取消</button>
+            <button type="submit">保存</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const close = () => closeAddObjectModal();
+    modal.querySelector("[data-action='close-add-object']").onclick = close;
+    modal.querySelector("[data-action='cancel-add-object']").onclick = close;
+    modal.addEventListener("click", event => {
+      if (event.target === modal) close();
+    });
+    modal.querySelector("#addObjectForm").addEventListener("submit", event => {
+      event.preventDefault();
+      saveNewObjectEvent();
+    });
+    modal.querySelector("#addObjectTemplate").addEventListener("change", updateAddObjectTemplateStatus);
+    return modal;
+  }
+
+  function closeAddObjectModal() {
+    const modal = document.getElementById("addObjectModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    modal.__sourceMap = null;
+  }
+
+  function setAddObjectStatus(message, isError = false) {
+    const status = document.getElementById("addObjectStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("error", isError);
+  }
+
+  function updateAddObjectTemplateStatus() {
+    const templateId = document.getElementById("addObjectTemplate")?.value || "itemPickup";
+    const template = getObjectScriptTemplate(templateId);
+    setAddObjectStatus(template.description);
+  }
+
+  function openAddObjectModal() {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!window.RBEditorFreeSpace?.allocate) throw new Error("空白区管理器不可用。");
+
+      const objects = loadMapEvents(currentMap).filter(ev => ev.type === "object");
+      const capacity = getObjectWritableCapacity(currentMap, objects.length);
+      if (objects.length >= capacity) throw new Error(`当前地图对象已达最大数量 ${capacity}。`);
+
+      const modal = ensureAddObjectModal();
+      modal.__sourceMap = currentMap;
+      modal.querySelector("#addObjectModalSubtitle").textContent = getMapDisplayNameWithCode(currentMap);
+      modal.querySelector("#addObjectTemplate").value = "itemPickup";
+      modal.querySelector("#addObjectX").value = String(Math.floor((currentMap.layout?.width ?? 0) / 2));
+      modal.querySelector("#addObjectY").value = String(Math.floor((currentMap.layout?.height ?? 0) / 2));
+      modal.querySelector("#addObjectElevation").value = "3";
+      modal.querySelector("#addObjectFlagId").value = "0";
+      modal.querySelector("#addObjectItemId").value = "1";
+      updateAddObjectTemplateStatus();
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      modal.querySelector("#addObjectX").focus();
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
+  }
+
+  function saveNewObjectEvent() {
+    const modal = document.getElementById("addObjectModal");
+    const sourceMap = modal?.__sourceMap;
+
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!modal || !sourceMap || sourceMap !== currentMap) {
+        throw new Error("当前地图已经变化，请关闭弹窗后重新新增对象。");
+      }
+
+      const objects = loadMapEvents(sourceMap).filter(ev => ev.type === "object");
+      const values = {
+        templateId: modal.querySelector("#addObjectTemplate")?.value || "itemPickup",
+        localId: getNextLocalId(objects),
+        x: parseNum(modal.querySelector("#addObjectX")?.value, "坐标 X", -32768, 32767),
+        y: parseNum(modal.querySelector("#addObjectY")?.value, "坐标 Y", -32768, 32767),
+        elevation: parseNum(modal.querySelector("#addObjectElevation")?.value, "高度/层级", 0, 0xFF),
+        flagId: parseNum(modal.querySelector("#addObjectFlagId")?.value, "事件Flag", 0, 0xFFFF),
+        itemId: parseNum(modal.querySelector("#addObjectItemId")?.value, "道具ID", 0, 0xFFFF),
+        quantity: 1,
+      };
+
+      const index = addObjectEventToMap(sourceMap, values);
+      closeAddObjectModal();
+      refreshAfterObjectArrayChange(index);
+    } catch (err) {
+      setAddObjectStatus(err?.message || String(err), true);
+    }
+  }
+
   function renderValueLabelOptions(labels, currentValue = 0) {
     const entries = Object.entries(labels || {});
     const current = Number(currentValue);
@@ -1158,6 +1437,8 @@
         <form id="addTrainerForm">
           <div class="modal-body">
             <div class="event-field-grid">
+              <label class="event-field-label" for="addTrainerTemplate">脚本模板</label>
+              <select id="addTrainerTemplate" class="event-edit-input">${renderTrainerTemplateOptions("simpleSingle")}</select>
               <label class="event-field-label" for="addTrainerLocalId">对象ID</label>
               <input id="addTrainerLocalId" class="event-edit-input" type="number" min="0" max="255" step="1" />
               <label class="event-field-label" for="addTrainerX">坐标 X</label>
@@ -1185,7 +1466,7 @@
               <label class="event-field-label" for="addTrainerPostBattleText">战后对话</label>
               <textarea id="addTrainerPostBattleText" class="event-edit-input" spellcheck="false"></textarea>
             </div>
-            <div id="addTrainerStatus" class="trainer-create-status">第一版会绑定已有训练家ID，并创建普通单打训练家战斗脚本。</div>
+            <div id="addTrainerStatus" class="trainer-create-status"></div>
           </div>
           <div class="modal-footer">
             <button type="button" class="secondary-btn" data-action="cancel-add-trainer">取消</button>
@@ -1205,6 +1486,7 @@
       event.preventDefault();
       saveNewTrainerEvent();
     });
+    modal.querySelector("#addTrainerTemplate").addEventListener("change", updateAddTrainerTemplateStatus);
     return modal;
   }
 
@@ -1223,6 +1505,12 @@
     status.classList.toggle("error", isError);
   }
 
+  function updateAddTrainerTemplateStatus() {
+    const templateId = document.getElementById("addTrainerTemplate")?.value || "simpleSingle";
+    const template = getTrainerScriptTemplate(templateId);
+    setAddTrainerStatus(`${template.description} 第一版会绑定已有训练家ID。`);
+  }
+
   function openAddTrainerModal() {
     try {
       if (!rom) throw new Error("尚未加载 ROM。");
@@ -1238,6 +1526,7 @@
       const modal = ensureAddTrainerModal();
       modal.__sourceMap = currentMap;
       modal.querySelector("#addTrainerModalSubtitle").textContent = getMapDisplayNameWithCode(currentMap);
+      modal.querySelector("#addTrainerTemplate").value = "simpleSingle";
       modal.querySelector("#addTrainerLocalId").value = String(getNextLocalId(objects));
       modal.querySelector("#addTrainerX").value = String(previousTrainer.x ?? Math.floor((currentMap.layout?.width ?? 0) / 2));
       modal.querySelector("#addTrainerY").value = String(previousTrainer.y ?? Math.floor((currentMap.layout?.height ?? 0) / 2));
@@ -1251,7 +1540,7 @@
       modal.querySelector("#addTrainerIntroText").value = "Let's battle!";
       modal.querySelector("#addTrainerDefeatText").value = "I lost!";
       modal.querySelector("#addTrainerPostBattleText").value = "Let's battle again sometime!";
-      setAddTrainerStatus("第一版会绑定已有训练家ID，并创建普通单打训练家战斗脚本。");
+      updateAddTrainerTemplateStatus();
       modal.classList.add("show");
       modal.setAttribute("aria-hidden", "false");
       modal.querySelector("#addTrainerLocalId").focus();
@@ -1271,6 +1560,7 @@
       }
 
       const values = {
+        templateId: modal.querySelector("#addTrainerTemplate")?.value || "simpleSingle",
         localId: parseNum(modal.querySelector("#addTrainerLocalId")?.value, "对象ID", 0, 0xFF),
         x: parseNum(modal.querySelector("#addTrainerX")?.value, "坐标 X", -32768, 32767),
         y: parseNum(modal.querySelector("#addTrainerY")?.value, "坐标 Y", -32768, 32767),
