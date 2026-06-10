@@ -129,6 +129,10 @@
       .connector-info { margin-top:8px; color:var(--muted); font-size:12px; line-height:1.45; }
       .connector-actions { display:flex; gap:8px; margin-top:10px; }
       .connector-actions button { margin:0; padding:7px 9px; font-size:12px; }
+      .connector-create-modal { max-width:520px; }
+      .connector-create-modal form { min-height:0; display:flex; flex:1 1 auto; flex-direction:column; }
+      .connector-create-status { min-height:20px; margin-top:10px; color:var(--muted); font-size:12px; }
+      .connector-create-status.error { color:#dc2626; font-weight:700; }
 
       .tile-library-grid:has(> .empty-tip),
       .terrain-library-grid:has(> .empty-tip) {

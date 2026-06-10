@@ -2,12 +2,11 @@
 // Warp event manager
 // ============================================================
 // Keep MapEvents in place, migrate only WarpEvent[] to managed free space,
-// reserve 10 slots, append new warps, and repair shifted warpId references
-// when deleting a middle warp.
+// reserve 10 extra slots, append new warps, and repair shifted warpId
+// references when deleting a middle warp.
 
 (function warpEventManagerModule() {
-  const MANAGED_WARP_CAPACITY = 10;
-  const MANAGED_WARP_BYTES = MANAGED_WARP_CAPACITY * WARP_EVENT_SIZE;
+  const EXTRA_WARP_CAPACITY = 10;
 
   function ensureWriteRange(off, size) {
     if (!rom || !isValidOffset(off, size)) {
@@ -59,19 +58,44 @@
     writeU8(off + 0x07, ev.mapGroup);
   }
 
-  function clearWarpSlots(dataOff) {
-    ensureWriteRange(dataOff, MANAGED_WARP_BYTES);
-    for (let i = 0; i < MANAGED_WARP_BYTES; i++) writeU8(dataOff + i, 0);
+  function clearWarpSlots(dataOff, capacity) {
+    const bytes = capacity * WARP_EVENT_SIZE;
+    ensureWriteRange(dataOff, bytes);
+    for (let i = 0; i < bytes; i++) writeU8(dataOff + i, 0);
   }
 
-  function isManagedWarpArray(dataOff) {
-    return window.RBEditorFreeSpace?.isInManagedRegion?.(dataOff, MANAGED_WARP_BYTES) === true;
+  function getManagedWarpStorage(dataOff) {
+    if (!window.RBEditorFreeSpace?.isInManagedRegion?.(dataOff, WARP_EVENT_SIZE)) {
+      return { managed: false, capacity: 0, bytes: 0, legacyFixed: false };
+    }
+
+    const range = window.RBEditorFreeSpace?.getState?.().allocated
+      ?.find(item => item.offset === dataOff && String(item.tag || "").startsWith("WarpEvent["));
+    if (!range) return { managed: false, capacity: 0, bytes: 0, legacyFixed: false };
+
+    const capacity = Math.floor(range.size / WARP_EVENT_SIZE);
+    return {
+      managed: capacity > 0,
+      capacity,
+      bytes: capacity * WARP_EVENT_SIZE,
+      legacyFixed: range.tag === "WarpEvent[10]",
+    };
   }
 
-  function allocateWarpArray() {
+  function getWritableCapacity(header, count = 0) {
+    const storage = getManagedWarpStorage(header?.events?.warpOff ?? null);
+    const expandedCapacity = Math.min(0xFF, count + EXTRA_WARP_CAPACITY);
+    if (!storage.managed) return expandedCapacity;
+    if (storage.legacyFixed && storage.capacity < count + EXTRA_WARP_CAPACITY) {
+      return expandedCapacity;
+    }
+    return storage.capacity;
+  }
+
+  function allocateWarpArray(capacity) {
     const allocator = window.RBEditorFreeSpace;
     if (!allocator?.allocate) throw new Error("Free-space manager is not available.");
-    return allocator.allocate(MANAGED_WARP_BYTES, { tag: "WarpEvent[10]" }).offset;
+    return allocator.allocate(capacity * WARP_EVENT_SIZE, { tag: `WarpEvent[capacity=${capacity};extra=${EXTRA_WARP_CAPACITY}]` }).offset;
   }
 
   function getWarps(header) {
@@ -92,25 +116,35 @@
     const events = header?.events || null;
     const dataOff = events?.warpOff ?? null;
     const count = events?.warpCount ?? 0;
+    const storage = getManagedWarpStorage(dataOff);
     return {
-      capacity: MANAGED_WARP_CAPACITY,
+      capacity: getWritableCapacity(header, count),
       count,
       dataOff,
-      managed: isManagedWarpArray(dataOff),
+      managed: storage.managed,
+      extraCapacity: EXTRA_WARP_CAPACITY,
     };
   }
 
-  function rewriteWarpArray(header, warps) {
+  function rewriteWarpArray(header, warps, options = {}) {
     if (!header?.events || !isValidOffset(header.events.offset, MAP_EVENTS_SIZE)) {
       throw new Error("MapEvents offset is invalid.");
     }
-    if (warps.length > MANAGED_WARP_CAPACITY) {
-      throw new Error(`Warp count cannot exceed ${MANAGED_WARP_CAPACITY}.`);
+
+    const requestedCapacity = clampInt(options.capacity, 0, 0xFF, 0);
+    const storage = getManagedWarpStorage(header.events.warpOff);
+    const capacity = requestedCapacity || getWritableCapacity(header, header.events.warpCount ?? warps.length);
+    if (warps.length > capacity) {
+      throw new Error(`Warp count cannot exceed ${capacity}.`);
     }
 
     const oldDataOff = header.events.warpOff;
-    const dataOff = isManagedWarpArray(oldDataOff) ? oldDataOff : allocateWarpArray();
-    clearWarpSlots(dataOff);
+    const canReuse = storage.managed
+      && !storage.legacyFixed
+      && storage.capacity === capacity
+      && warps.length <= storage.capacity;
+    const dataOff = canReuse ? oldDataOff : allocateWarpArray(capacity);
+    clearWarpSlots(dataOff, capacity);
     warps.forEach((warp, index) => writeWarpEntry(dataOff + index * WARP_EVENT_SIZE, warp));
 
     writeU8(header.events.offset + 0x01, warps.length);
@@ -158,8 +192,9 @@
 
   function addWarpEvent(header, values = {}) {
     const warps = getWarps(header);
-    if (warps.length >= MANAGED_WARP_CAPACITY) {
-      throw new Error(`当前地图传送点已达最大数量 ${MANAGED_WARP_CAPACITY}.`);
+    const capacity = getWritableCapacity(header, warps.length);
+    if (warps.length >= capacity) {
+      throw new Error(`当前地图传送点已达最大数量 ${capacity}.`);
     }
 
     const previous = warps[warps.length - 1] || {};
@@ -172,7 +207,7 @@
       mapGroup: values.mapGroup ?? header?.mapGroup ?? 0,
     });
     warps.push(next);
-    rewriteWarpArray(header, warps);
+    rewriteWarpArray(header, warps, { capacity });
     return warps.length - 1;
   }
 
@@ -206,7 +241,7 @@
   }
 
   window.RBEditorWarpEventManager = {
-    MANAGED_WARP_CAPACITY,
+    EXTRA_WARP_CAPACITY,
     getStorageInfo,
     findIncomingWarpReferences,
     rewriteWarpArray,

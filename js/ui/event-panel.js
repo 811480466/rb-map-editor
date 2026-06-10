@@ -4,33 +4,56 @@
 // 事件模式右侧面板：未选中事件时展示列表；选中单个事件时展示属性详情。
 
 (function eventPanelModule() {
-  let eventTypeFilter = "all";
+  let eventTypeFilter = "object";
 
   function injectStyle() {
     if (document.getElementById("eventPanelStyle")) return;
     const style = document.createElement("style");
     style.id = "eventPanelStyle";
     style.textContent = `
-      .event-panel-header {
+      .event-type-tabs {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: center;
+        gap: 0;
+        border-bottom: 1px solid #d8e4f5;
+      }
+
+      .event-type-tabs button {
+        display: block !important;
+        min-width: 0;
+        width: 100%;
+        margin: 0 0 -1px;
+        border: 0 !important;
+        border-bottom: 2px solid transparent !important;
+        background: transparent !important;
+        color: #16447d !important;
+        border-radius: 0;
+        padding: 8px 2px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .event-type-tabs button.active {
+        border-bottom-color: #1f5fbf !important;
+        color: #1f5fbf !important;
+      }
+
+      .event-tab-actions {
+        min-height: 32px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 10px;
-      }
-
-      .event-panel-title {
-        font-size: 15px;
-        font-weight: 700;
-        color: #163c7a;
-      }
-
-      .event-panel-header-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: flex-end;
         gap: 8px;
+        margin: 10px 0;
+      }
+
+      .event-tab-actions:empty {
+        min-height: 0;
+        margin: 8px 0 4px;
       }
 
       .event-warp-capacity {
@@ -40,29 +63,60 @@
         white-space: nowrap;
       }
 
-      .event-summary-filter {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-        margin: 8px 0 12px;
+      #addWarpEventBtn {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+        padding: 7px 12px;
+        white-space: nowrap;
       }
 
-      .event-summary-filter button {
-        min-width: 0;
-        border: 1px solid #bfd1ec;
-        background: #f7fbff;
-        color: #16447d;
-        border-radius: 8px;
-        padding: 8px 10px;
+      #addTrainerEventBtn {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+        padding: 7px 12px;
+        white-space: nowrap;
+      }
+
+      .warp-create-modal {
+        max-width: 520px;
+      }
+
+      .trainer-create-modal {
+        max-width: 560px;
+      }
+
+      .warp-create-modal form,
+      .trainer-create-modal form {
+        min-height: 0;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+      }
+
+      .warp-create-modal .event-field-grid,
+      .trainer-create-modal .event-field-grid {
+        grid-template-columns: 110px minmax(0, 1fr);
+      }
+
+      .trainer-create-modal textarea {
+        min-height: 64px;
+        resize: vertical;
+        font-family: Consolas, Monaco, monospace;
+      }
+
+      .warp-create-status,
+      .trainer-create-status {
+        min-height: 20px;
+        margin-top: 10px;
+        color: #566b88;
         font-size: 12px;
-        text-align: left;
-        cursor: pointer;
       }
 
-      .event-summary-filter button.active {
-        background: #1f5fbf;
-        border-color: #1f5fbf;
-        color: #fff;
+      .warp-create-status.error,
+      .trainer-create-status.error {
+        color: #dc2626;
         font-weight: 700;
       }
 
@@ -259,6 +313,13 @@
     return `${ev.type}:${ev.index}:${ev.offset}`;
   }
 
+  function eventFilterKey(ev) {
+    if (ev?.type === "object") return ev.trainerBattle ? "trainer" : "object";
+    if (ev?.type === "warp") return "warp";
+    if (ev?.type === "bg" || ev?.type === "coord") return "bgCoord";
+    return "object";
+  }
+
   function getSelectedEvent() {
     if (typeof selectedEventKey === "undefined" || !selectedEventKey) return null;
     if (typeof currentEvents === "undefined" || !Array.isArray(currentEvents)) return null;
@@ -268,7 +329,7 @@
   function countEvents(events) {
     return {
       all: events.length,
-      object: events.filter(e => e.type === "object").length,
+      object: events.filter(e => e.type === "object" && !e.trainerBattle).length,
       trainer: events.filter(e => e.type === "object" && e.trainerBattle).length,
       warp: events.filter(e => e.type === "warp").length,
       bg: events.filter(e => e.type === "bg").length,
@@ -277,45 +338,50 @@
   }
 
   function filterEvents(events) {
-    if (eventTypeFilter === "all") return events;
     if (eventTypeFilter === "trainer") return events.filter(e => e.type === "object" && e.trainerBattle);
-    if (eventTypeFilter === "object") return events.filter(e => e.type === "object");
+    if (eventTypeFilter === "object") return events.filter(e => e.type === "object" && !e.trainerBattle);
     if (eventTypeFilter === "bgCoord") return events.filter(e => e.type === "bg" || e.type === "coord");
     return events.filter(e => e.type === eventTypeFilter);
   }
 
-  function toggleFilter(key, events) {
-    eventTypeFilter = eventTypeFilter === key ? "all" : key;
+  function selectEventType(key, events) {
+    eventTypeFilter = key || "object";
     renderListView(events || []);
   }
 
   function renderEventSummary(events) {
     const el = document.getElementById("eventSummary");
     if (!el) return;
-    const c = countEvents(events || []);
     const items = [
-      ["object", `对象: ${c.object}`],
-      ["trainer", `训练家: ${c.trainer}`],
-      ["warp", `传送点: ${c.warp}`],
-      ["bgCoord", `事件: ${c.bg + c.coord}`],
+      ["object", "对象"],
+      ["trainer", "训练家"],
+      ["warp", "传送点"],
+      ["bgCoord", "事件"],
     ];
 
-    el.className = "event-summary-filter";
-    el.innerHTML = items.map(([key, label]) => {
-      const active = eventTypeFilter === key;
-      return `<button type="button" data-event-summary-filter="${key}" class="${active ? "active" : ""}">${escapeHtml(label)}</button>`;
-    }).join("");
+    el.className = "event-type-tabs";
+    el.setAttribute("role", "tablist");
+    el.innerHTML = "";
 
-    for (const btn of el.querySelectorAll("button[data-event-summary-filter]")) {
-      btn.onclick = () => toggleFilter(btn.dataset.eventSummaryFilter || "all", events);
+    for (const [key, name] of items) {
+      const active = eventTypeFilter === key;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.dataset.eventSummaryFilter = key;
+      btn.className = active ? "active" : "";
+      btn.textContent = name;
+      btn.onclick = () => selectEventType(key, events);
+      el.appendChild(btn);
     }
   }
 
   function getWarpCapacityInfo(events) {
     const manager = window.RBEditorWarpEventManager;
-    const capacity = manager?.MANAGED_WARP_CAPACITY ?? 10;
     const storage = currentMap && manager?.getStorageInfo ? manager.getStorageInfo(currentMap) : null;
     const count = storage?.count ?? countEvents(events || []).warp;
+    const capacity = storage?.capacity ?? (count + (manager?.EXTRA_WARP_CAPACITY ?? 10));
     return { count, capacity };
   }
 
@@ -358,26 +424,29 @@
     const eventTab = getEventTab();
     if (!eventTab) return;
     const warpCapacity = getWarpCapacityInfo(events);
+    const warpActions = eventTypeFilter === "warp"
+      ? `
+        <span class="event-warp-capacity">传送点：${escapeHtml(warpCapacity.count)} / 最大 ${escapeHtml(warpCapacity.capacity)}</span>
+        <button id="addWarpEventBtn" class="event-primary-btn" type="button" ${warpCapacity.count >= warpCapacity.capacity ? "disabled" : ""}>新增传送点</button>`
+      : "";
+    const trainerActions = eventTypeFilter === "trainer"
+      ? `<button id="addTrainerEventBtn" class="event-primary-btn" type="button">新增训练家</button>`
+      : "";
 
     eventTab.innerHTML = `
-      <div class="event-panel-header">
-        <div class="event-panel-title">事件列表</div>
-        <div class="event-panel-header-actions">
-          <span class="event-warp-capacity">传送点：${escapeHtml(warpCapacity.count)} / 最大 ${escapeHtml(warpCapacity.capacity)}</span>
-          <button id="addWarpEventBtn" class="event-primary-btn" type="button" ${warpCapacity.count >= warpCapacity.capacity ? "disabled" : ""}>新增传送点</button>
-        </div>
-      </div>
       <div id="eventSummary"></div>
+      <div class="event-tab-actions">${warpActions}${trainerActions}</div>
       <div id="eventList"></div>
     `;
 
     renderEventSummary(events);
-    document.getElementById("addWarpEventBtn")?.addEventListener("click", addWarpEvent);
+    document.getElementById("addWarpEventBtn")?.addEventListener("click", openAddWarpModal);
+    document.getElementById("addTrainerEventBtn")?.addEventListener("click", openAddTrainerModal);
 
     const list = document.getElementById("eventList");
     const rows = filterEvents(events);
     if (!rows.length) {
-      list.innerHTML = `<div class="empty-tip">当前筛选没有事件。</div>`;
+      list.innerHTML = `<div class="empty-tip">当前分类没有数据。</div>`;
     } else {
       for (const ev of rows) {
         const row = document.createElement("div");
@@ -573,6 +642,7 @@
         <button id="applyEventEditBtn" class="event-primary-btn" type="button">应用修改</button>
         <button id="resetEventEditBtn" class="event-secondary-btn" type="button">撤销修改</button>
         ${ev.type === "warp" ? `<button id="deleteWarpEventBtn" class="event-danger-btn" type="button">删除传送点</button>` : ""}
+        ${ev.type === "object" && ev.trainerBattle ? `<button id="deleteTrainerEventBtn" class="event-danger-btn" type="button">删除训练家</button>` : ""}
       </div>
       <div id="eventEditStatus" class="event-edit-status"></div>
       <details class="event-debug">
@@ -586,6 +656,7 @@
     document.getElementById("applyEventEditBtn")?.addEventListener("click", () => applyEventEdit(ev));
     document.getElementById("resetEventEditBtn")?.addEventListener("click", () => renderDetailView(ev));
     document.getElementById("deleteWarpEventBtn")?.addEventListener("click", () => deleteWarpEvent(ev));
+    document.getElementById("deleteTrainerEventBtn")?.addEventListener("click", () => deleteTrainerEvent(ev));
 
     for (const input of eventTab.querySelectorAll(".event-edit-input")) {
       input.addEventListener("input", () => setEditStatus("未应用修改。", ""));
@@ -742,6 +813,184 @@
     writeDword(ev.offset + 0x0C, values.scriptPtr);
   }
 
+  function writeRawBytes(off, bytes) {
+    ensureWriteRange(off, bytes.length);
+    for (let i = 0; i < bytes.length; i++) writeByte(off + i, bytes[i]);
+  }
+
+  function allocateBytes(bytes, tag) {
+    const allocator = window.RBEditorFreeSpace;
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用。");
+    const off = allocator.allocate(bytes.length, { tag }).offset;
+    writeRawBytes(off, bytes);
+    return off;
+  }
+
+  function getManagedObjectStorage(dataOff) {
+    if (!window.RBEditorFreeSpace?.isInManagedRegion?.(dataOff, OBJECT_EVENT_SIZE)) {
+      return { managed: false, capacity: 0 };
+    }
+
+    const range = window.RBEditorFreeSpace?.getState?.().allocated
+      ?.find(item => item.offset === dataOff && String(item.tag || "").startsWith("ObjectEvent["));
+    if (!range) return { managed: false, capacity: 0 };
+
+    const capacity = Math.floor(range.size / OBJECT_EVENT_SIZE);
+    return { managed: capacity > 0, capacity };
+  }
+
+  function getObjectWritableCapacity(header, count = 0) {
+    const storage = getManagedObjectStorage(header?.events?.objectOff ?? null);
+    if (storage.managed) return storage.capacity;
+    return Math.min(100, count + 10);
+  }
+
+  function normalizeObjectEvent(ev = {}) {
+    return {
+      localId: parseNum(ev.localId ?? 1, "localId", 0, 0xFF),
+      graphicsId: parseNum(ev.graphicsId ?? 0, "graphicsId", 0, 0xFF),
+      inConnection: parseNum(ev.inConnection ?? ev.kind ?? 0, "inConnection", 0, 0xFF),
+      padding03: parseNum(ev.padding03 ?? 0, "padding03", 0, 0xFF),
+      x: parseNum(ev.x ?? 0, "x", -32768, 32767),
+      y: parseNum(ev.y ?? 0, "y", -32768, 32767),
+      elevation: parseNum(ev.elevation ?? 0, "elevation", 0, 0xFF),
+      movementType: parseNum(ev.movementType ?? 0, "movementType", 0, 0xFF),
+      movementRangeX: parseNum(ev.movementRangeX ?? 0, "movementRangeX", 0, 0x0F),
+      movementRangeY: parseNum(ev.movementRangeY ?? 0, "movementRangeY", 0, 0x0F),
+      trainerType: parseNum(ev.trainerType ?? 0, "trainerType", 0, 0xFFFF),
+      trainerRange: parseNum(ev.trainerRange ?? 0, "trainerRange", 0, 0xFFFF),
+      scriptPtr: parseNum(ev.scriptPtr ?? 0, "scriptPtr", 0, 0xFFFFFFFF),
+      flagId: parseNum(ev.flagId ?? 0, "flagId", 0, 0xFFFF),
+      padding16: parseNum(ev.padding16 ?? ev.unknown16 ?? 0, "padding16", 0, 0xFFFF),
+    };
+  }
+
+  function writeObjectEntry(off, object) {
+    const ev = normalizeObjectEvent(object);
+    const movementRangeRaw = (ev.movementRangeX & 0x0F) | ((ev.movementRangeY & 0x0F) << 4);
+    ensureWriteRange(off, OBJECT_EVENT_SIZE);
+    writeByte(off + 0x00, ev.localId);
+    writeByte(off + 0x01, ev.graphicsId);
+    writeByte(off + 0x02, ev.inConnection);
+    writeByte(off + 0x03, ev.padding03);
+    writeS16(off + 0x04, ev.x);
+    writeS16(off + 0x06, ev.y);
+    writeByte(off + 0x08, ev.elevation);
+    writeByte(off + 0x09, ev.movementType);
+    writeWord(off + 0x0A, movementRangeRaw);
+    writeWord(off + 0x0C, ev.trainerType);
+    writeWord(off + 0x0E, ev.trainerRange);
+    writeDword(off + 0x10, ev.scriptPtr);
+    writeWord(off + 0x14, ev.flagId);
+    writeWord(off + 0x16, ev.padding16);
+  }
+
+  function clearObjectSlots(dataOff, capacity) {
+    ensureWriteRange(dataOff, capacity * OBJECT_EVENT_SIZE);
+    for (let i = 0; i < capacity * OBJECT_EVENT_SIZE; i++) writeByte(dataOff + i, 0);
+  }
+
+  function rewriteObjectArray(header, objects, options = {}) {
+    if (!header?.events || !isValidOffset(header.events.offset, MAP_EVENTS_SIZE)) {
+      throw new Error("MapEvents offset 无效。");
+    }
+
+    const requestedCapacity = parseNum(options.capacity ?? 0, "对象容量", 0, 100);
+    const storage = getManagedObjectStorage(header.events.objectOff);
+    const capacity = requestedCapacity || getObjectWritableCapacity(header, header.events.objectCount ?? objects.length);
+    if (objects.length > capacity) throw new Error(`对象数量不能超过 ${capacity}。`);
+
+    const canReuse = storage.managed && storage.capacity === capacity && objects.length <= storage.capacity;
+    const dataOff = canReuse
+      ? header.events.objectOff
+      : window.RBEditorFreeSpace.allocate(capacity * OBJECT_EVENT_SIZE, { tag: `ObjectEvent[capacity=${capacity};extra=10]` }).offset;
+
+    clearObjectSlots(dataOff, capacity);
+    objects.forEach((object, index) => writeObjectEntry(dataOff + index * OBJECT_EVENT_SIZE, object));
+    writeByte(header.events.offset + 0x00, objects.length);
+    writeDword(header.events.offset + 0x04, offsetToPtr(dataOff));
+    header.events = parseMapEvents(header.events.offset);
+    return header.events;
+  }
+
+  function getNextLocalId(objects) {
+    const used = new Set(objects.map(ev => Number(ev.localId)).filter(Number.isInteger));
+    for (let id = 1; id <= 0xFF; id++) {
+      if (!used.has(id)) return id;
+    }
+    throw new Error("当前地图没有可用 localId。");
+  }
+
+  function buildTrainerBattleScript(values, introPtr, defeatPtr, postBattlePtr) {
+    const bytes = new Array(23).fill(0);
+    bytes[0] = 0x5C;
+    bytes[1] = 0;
+    const trainerId = values.trainerId & 0xFFFF;
+    const localId = values.localId & 0xFFFF;
+    bytes[2] = trainerId & 0xFF;
+    bytes[3] = (trainerId >> 8) & 0xFF;
+    bytes[4] = localId & 0xFF;
+    bytes[5] = (localId >> 8) & 0xFF;
+    for (const [base, ptr] of [[6, introPtr >>> 0], [10, defeatPtr >>> 0]]) {
+      bytes[base] = ptr & 0xFF;
+      bytes[base + 1] = (ptr >> 8) & 0xFF;
+      bytes[base + 2] = (ptr >> 16) & 0xFF;
+      bytes[base + 3] = (ptr >> 24) & 0xFF;
+    }
+    const postPtr = postBattlePtr >>> 0;
+    bytes[14] = 0x0F; // loadword
+    bytes[15] = 0x00;
+    bytes[16] = postPtr & 0xFF;
+    bytes[17] = (postPtr >> 8) & 0xFF;
+    bytes[18] = (postPtr >> 16) & 0xFF;
+    bytes[19] = (postPtr >> 24) & 0xFF;
+    bytes[20] = 0x09; // callstd
+    bytes[21] = 0x06; // Std_MsgboxAutoclose
+    bytes[22] = 0x02; // end
+    return bytes;
+  }
+
+  function addTrainerEventToMap(header, values) {
+    if (!rom) throw new Error("尚未加载 ROM。");
+    if (!header) throw new Error("请先选择地图。");
+
+    const objects = loadMapEvents(header).filter(ev => ev.type === "object").map(normalizeObjectEvent);
+    const capacity = getObjectWritableCapacity(header, objects.length);
+    if (objects.length >= capacity) throw new Error(`当前地图对象已达最大数量 ${capacity}。`);
+
+    const introBytes = encodePokemonEnglishText(values.introText || "...");
+    const defeatBytes = encodePokemonEnglishText(values.defeatText || "...");
+    const postBattleBytes = encodePokemonEnglishText(values.postBattleText || values.defeatText || "...");
+    const introOff = allocateBytes(introBytes, "TrainerIntroText");
+    const defeatOff = allocateBytes(defeatBytes, "TrainerDefeatText");
+    const postBattleOff = allocateBytes(postBattleBytes, "TrainerPostBattleText");
+    const scriptOff = allocateBytes(
+      buildTrainerBattleScript(values, offsetToPtr(introOff), offsetToPtr(defeatOff), offsetToPtr(postBattleOff)),
+      "TrainerBattleScript"
+    );
+
+    objects.push({
+      localId: values.localId,
+      graphicsId: values.graphicsId,
+      inConnection: 0,
+      padding03: 0,
+      x: values.x,
+      y: values.y,
+      elevation: values.elevation,
+      movementType: values.movementType,
+      movementRangeX: 0,
+      movementRangeY: 0,
+      trainerType: values.trainerType,
+      trainerRange: values.trainerRange,
+      scriptPtr: offsetToPtr(scriptOff),
+      flagId: values.flagId,
+      padding16: 0,
+    });
+
+    rewriteObjectArray(header, objects, { capacity });
+    return objects.length - 1;
+  }
+
   function writeEventToRom(ev, values) {
     if (ev.type === "object") writeObjectEvent(ev, values);
     else if (ev.type === "warp") writeWarpEvent(ev, values);
@@ -798,16 +1047,410 @@
     renderListView(currentEvents || []);
   }
 
-  function addWarpEvent() {
+  function refreshAfterTrainerArrayChange(focusObjectIndex = null) {
+    if (currentMap && typeof loadMapEvents === "function") {
+      currentEvents = loadMapEvents(currentMap);
+    }
+
+    if (currentMap && typeof renderMap === "function") {
+      renderMap(currentMap, currentEvents);
+    }
+
+    eventTypeFilter = "trainer";
+    if (focusObjectIndex !== null) {
+      const ev = (currentEvents || []).find(e => e.type === "object" && e.index === focusObjectIndex);
+      if (ev) {
+        selectedEventKey = eventKey(ev);
+        renderDetailView(ev);
+        setEditStatus("已新增训练家。点击左上角“导出”保存到文件。", "ok");
+        return;
+      }
+    }
+
+    selectedEventKey = null;
+    renderListView(currentEvents || []);
+  }
+
+  function renderValueLabelOptions(labels, currentValue = 0) {
+    const entries = Object.entries(labels || {});
+    const current = Number(currentValue);
+    const seen = new Set(entries.map(([raw]) => Number(raw)));
+    let html = entries.map(([raw, label]) => {
+      const value = Number(raw);
+      const selected = value === current ? " selected" : "";
+      return `<option value="${value}"${selected}>${escapeHtml(hex(value, 2))} ${escapeHtml(label)}</option>`;
+    }).join("");
+
+    if (!seen.has(current)) {
+      html += `<option value="${current}" selected>${escapeHtml(hex(current, 2))} 未知类型</option>`;
+    }
+    return html;
+  }
+
+  function renderTrainerMovementOptions(currentValue = 0) {
+    return renderValueLabelOptions(window.RBEditorMovementTypeSelect?.MOVEMENT_TYPE_LABELS, currentValue);
+  }
+
+  function renderTrainerTypeOptions(currentValue = 1) {
+    return renderValueLabelOptions(window.RBEditorTrainerTypeSelect?.TRAINER_TYPE_LABELS, currentValue);
+  }
+
+  function getTrainerGraphicsList() {
+    const list = window.RBEditorObjectEventGraphicsData;
+    return Array.isArray(list) ? list : [];
+  }
+
+  function formatObjectGraphicsLabel(itemOrId) {
+    const list = getTrainerGraphicsList();
+    const item = typeof itemOrId === "object"
+      ? itemOrId
+      : list.find(v => Number(v.id) === Number(itemOrId));
+    const id = Number(item?.id ?? itemOrId);
+    if (!item) return `${hex(id, 2)} 未知对象图形`;
+    return `${hex(id, 2)} ${item.name || item.macro || "对象"}${item.macro ? ` / ${item.macro}` : ""}`;
+  }
+
+  function installAddTrainerGraphicsDropdown(value) {
+    const host = document.getElementById("addTrainerGraphicsHost");
+    if (!host) return;
+
+    const currentValue = Number(value) || 0;
+    const Dropdown = window.RBEditorSearchableDropdown;
+    const options = getTrainerGraphicsList();
+    host.innerHTML = "";
+
+    if (!Dropdown || !options.length) {
+      host.innerHTML = `<input id="addTrainerGraphicsId" class="event-edit-input" type="number" min="0" max="255" step="1" value="${escapeHtml(currentValue)}" />`;
+      return;
+    }
+
+    const dropdown = new Dropdown({
+      container: host,
+      value: currentValue,
+      options,
+      fieldName: "graphicsId",
+      hiddenClassName: "event-edit-input",
+      placeholder: "搜索对象 ID / 名称 / 宏名",
+      getValue: item => Number(item.id),
+      getLabel: item => formatObjectGraphicsLabel(item),
+      getSearchText: item => `${item.id} ${hex(item.id, 2)} ${item.name || ""} ${item.macro || ""}`,
+    });
+    dropdown.getHiddenInput().id = "addTrainerGraphicsId";
+  }
+
+  function ensureAddTrainerModal() {
+    let modal = document.getElementById("addTrainerModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "addTrainerModal";
+    modal.className = "modal-backdrop";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = `
+      <div class="modal trainer-create-modal" role="dialog" aria-modal="true" aria-labelledby="addTrainerModalTitle">
+        <div class="modal-header">
+          <div>
+            <h2 id="addTrainerModalTitle" class="modal-title">新增训练家</h2>
+            <div id="addTrainerModalSubtitle" class="modal-subtitle"></div>
+          </div>
+          <button type="button" class="modal-close" data-action="close-add-trainer" aria-label="关闭">×</button>
+        </div>
+        <form id="addTrainerForm">
+          <div class="modal-body">
+            <div class="event-field-grid">
+              <label class="event-field-label" for="addTrainerLocalId">对象ID</label>
+              <input id="addTrainerLocalId" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addTrainerX">坐标 X</label>
+              <input id="addTrainerX" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addTrainerY">坐标 Y</label>
+              <input id="addTrainerY" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addTrainerElevation">高度/层级</label>
+              <input id="addTrainerElevation" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addTrainerGraphicsId">图形</label>
+              <div id="addTrainerGraphicsHost"></div>
+              <label class="event-field-label" for="addTrainerMovementType">移动类型</label>
+              <select id="addTrainerMovementType" class="event-edit-input">${renderTrainerMovementOptions(0)}</select>
+              <label class="event-field-label" for="addTrainerType">训练家类型</label>
+              <select id="addTrainerType" class="event-edit-input">${renderTrainerTypeOptions(1)}</select>
+              <label class="event-field-label" for="addTrainerRange">视野/树果</label>
+              <input id="addTrainerRange" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+              <label class="event-field-label" for="addTrainerId">训练家ID</label>
+              <input id="addTrainerId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+              <label class="event-field-label" for="addTrainerFlagId">事件Flag</label>
+              <input id="addTrainerFlagId" class="event-edit-input" type="number" min="0" max="65535" step="1" />
+              <label class="event-field-label" for="addTrainerIntroText">开战对话</label>
+              <textarea id="addTrainerIntroText" class="event-edit-input" spellcheck="false"></textarea>
+              <label class="event-field-label" for="addTrainerDefeatText">战败对话</label>
+              <textarea id="addTrainerDefeatText" class="event-edit-input" spellcheck="false"></textarea>
+              <label class="event-field-label" for="addTrainerPostBattleText">战后对话</label>
+              <textarea id="addTrainerPostBattleText" class="event-edit-input" spellcheck="false"></textarea>
+            </div>
+            <div id="addTrainerStatus" class="trainer-create-status">第一版会绑定已有训练家ID，并创建普通单打训练家战斗脚本。</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="secondary-btn" data-action="cancel-add-trainer">取消</button>
+            <button type="submit">保存</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const close = () => closeAddTrainerModal();
+    modal.querySelector("[data-action='close-add-trainer']").onclick = close;
+    modal.querySelector("[data-action='cancel-add-trainer']").onclick = close;
+    modal.addEventListener("click", event => {
+      if (event.target === modal) close();
+    });
+    modal.querySelector("#addTrainerForm").addEventListener("submit", event => {
+      event.preventDefault();
+      saveNewTrainerEvent();
+    });
+    return modal;
+  }
+
+  function closeAddTrainerModal() {
+    const modal = document.getElementById("addTrainerModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    modal.__sourceMap = null;
+  }
+
+  function setAddTrainerStatus(message, isError = false) {
+    const status = document.getElementById("addTrainerStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("error", isError);
+  }
+
+  function openAddTrainerModal() {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!window.RBEditorFreeSpace?.allocate) throw new Error("空白区管理器不可用。");
+
+      const objects = loadMapEvents(currentMap).filter(ev => ev.type === "object");
+      const trainers = objects.filter(ev => ev.trainerBattle);
+      const capacity = getObjectWritableCapacity(currentMap, objects.length);
+      if (objects.length >= capacity) throw new Error(`当前地图对象已达最大数量 ${capacity}。`);
+
+      const previousTrainer = trainers[trainers.length - 1] || {};
+      const modal = ensureAddTrainerModal();
+      modal.__sourceMap = currentMap;
+      modal.querySelector("#addTrainerModalSubtitle").textContent = getMapDisplayNameWithCode(currentMap);
+      modal.querySelector("#addTrainerLocalId").value = String(getNextLocalId(objects));
+      modal.querySelector("#addTrainerX").value = String(previousTrainer.x ?? Math.floor((currentMap.layout?.width ?? 0) / 2));
+      modal.querySelector("#addTrainerY").value = String(previousTrainer.y ?? Math.floor((currentMap.layout?.height ?? 0) / 2));
+      modal.querySelector("#addTrainerElevation").value = String(previousTrainer.elevation ?? 0);
+      installAddTrainerGraphicsDropdown(previousTrainer.graphicsId ?? 1);
+      modal.querySelector("#addTrainerMovementType").value = String(previousTrainer.movementType ?? 0);
+      modal.querySelector("#addTrainerType").value = String(previousTrainer.trainerType ?? 1);
+      modal.querySelector("#addTrainerRange").value = String(previousTrainer.trainerRange ?? 3);
+      modal.querySelector("#addTrainerId").value = String(previousTrainer.trainerBattle?.trainerId ?? 0);
+      modal.querySelector("#addTrainerFlagId").value = String(previousTrainer.flagId ?? 0);
+      modal.querySelector("#addTrainerIntroText").value = "Let's battle!";
+      modal.querySelector("#addTrainerDefeatText").value = "I lost!";
+      modal.querySelector("#addTrainerPostBattleText").value = "Let's battle again sometime!";
+      setAddTrainerStatus("第一版会绑定已有训练家ID，并创建普通单打训练家战斗脚本。");
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      modal.querySelector("#addTrainerLocalId").focus();
+    } catch (err) {
+      alert(err?.message || String(err));
+    }
+  }
+
+  function saveNewTrainerEvent() {
+    const modal = document.getElementById("addTrainerModal");
+    const sourceMap = modal?.__sourceMap;
+
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!modal || !sourceMap || sourceMap !== currentMap) {
+        throw new Error("当前地图已经变化，请关闭弹窗后重新新增训练家。");
+      }
+
+      const values = {
+        localId: parseNum(modal.querySelector("#addTrainerLocalId")?.value, "对象ID", 0, 0xFF),
+        x: parseNum(modal.querySelector("#addTrainerX")?.value, "坐标 X", -32768, 32767),
+        y: parseNum(modal.querySelector("#addTrainerY")?.value, "坐标 Y", -32768, 32767),
+        elevation: parseNum(modal.querySelector("#addTrainerElevation")?.value, "高度/层级", 0, 0xFF),
+        graphicsId: parseNum(modal.querySelector("#addTrainerGraphicsId")?.value, "图形", 0, 0xFF),
+        movementType: parseNum(modal.querySelector("#addTrainerMovementType")?.value, "移动类型", 0, 0xFF),
+        trainerType: parseNum(modal.querySelector("#addTrainerType")?.value, "训练家类型", 0, 0xFFFF),
+        trainerRange: parseNum(modal.querySelector("#addTrainerRange")?.value, "视野/树果", 0, 0xFFFF),
+        trainerId: parseNum(modal.querySelector("#addTrainerId")?.value, "训练家ID", 0, 0xFFFF),
+        flagId: parseNum(modal.querySelector("#addTrainerFlagId")?.value, "事件Flag", 0, 0xFFFF),
+        introText: modal.querySelector("#addTrainerIntroText")?.value || "",
+        defeatText: modal.querySelector("#addTrainerDefeatText")?.value || "",
+        postBattleText: modal.querySelector("#addTrainerPostBattleText")?.value || "",
+      };
+
+      const objects = loadMapEvents(sourceMap).filter(ev => ev.type === "object");
+      if (objects.some(ev => ev.localId === values.localId)) throw new Error(`对象ID ${values.localId} 已存在。`);
+
+      const index = addTrainerEventToMap(sourceMap, values);
+      closeAddTrainerModal();
+      refreshAfterTrainerArrayChange(index);
+    } catch (err) {
+      const message = String(err?.message || err).replace("区域名称包含不支持的字符", "对话文本包含不支持的字符");
+      setAddTrainerStatus(message, true);
+    }
+  }
+
+  function deleteTrainerEvent(ev) {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!ev || ev.type !== "object" || !ev.trainerBattle) throw new Error("当前选中的不是训练家。");
+
+      const objectsRaw = loadMapEvents(currentMap).filter(item => item.type === "object");
+      const current = objectsRaw[ev.index];
+      if (!current || !current.trainerBattle || current.localId !== ev.localId) {
+        throw new Error("训练家数据已变化，请重新选择后再删除。");
+      }
+
+      if (!confirm(`确定删除训练家 #${ev.index} 吗？\n对象ID ${ev.localId}、训练家ID ${ev.trainerBattle.trainerId} 将从当前地图移除。`)) return;
+
+      const capacity = getObjectWritableCapacity(currentMap, objectsRaw.length);
+      const objects = objectsRaw.map(normalizeObjectEvent);
+      objects.splice(ev.index, 1);
+      rewriteObjectArray(currentMap, objects, { capacity });
+      refreshAfterTrainerArrayChange(null);
+    } catch (err) {
+      setEditStatus(err?.message || String(err), "error");
+    }
+  }
+
+  function ensureAddWarpModal() {
+    let modal = document.getElementById("addWarpModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "addWarpModal";
+    modal.className = "modal-backdrop";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = `
+      <div class="modal warp-create-modal" role="dialog" aria-modal="true" aria-labelledby="addWarpModalTitle">
+        <div class="modal-header">
+          <div>
+            <h2 id="addWarpModalTitle" class="modal-title">新增传送点</h2>
+            <div id="addWarpModalSubtitle" class="modal-subtitle"></div>
+          </div>
+          <button type="button" class="modal-close" data-action="close-add-warp" aria-label="关闭">×</button>
+        </div>
+        <form id="addWarpForm">
+          <div class="modal-body">
+            <div class="event-field-grid">
+              <label class="event-field-label" for="addWarpX">x</label>
+              <input id="addWarpX" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addWarpY">y</label>
+              <input id="addWarpY" class="event-edit-input" type="number" min="-32768" max="32767" step="1" />
+              <label class="event-field-label" for="addWarpElevation">elevation</label>
+              <input id="addWarpElevation" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addWarpGroup">目标 Group</label>
+              <input id="addWarpGroup" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addWarpMap">目标 Map</label>
+              <input id="addWarpMap" class="event-edit-input" type="number" min="0" max="255" step="1" />
+              <label class="event-field-label" for="addWarpId">目标 warpId</label>
+              <input id="addWarpId" class="event-edit-input" type="number" min="0" max="255" step="1" />
+            </div>
+            <div id="addWarpStatus" class="warp-create-status"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="secondary-btn" data-action="cancel-add-warp">取消</button>
+            <button type="submit">保存</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const close = () => closeAddWarpModal();
+    modal.querySelector("[data-action='close-add-warp']").onclick = close;
+    modal.querySelector("[data-action='cancel-add-warp']").onclick = close;
+    modal.addEventListener("click", event => {
+      if (event.target === modal) close();
+    });
+    modal.querySelector("#addWarpForm").addEventListener("submit", event => {
+      event.preventDefault();
+      saveNewWarpEvent();
+    });
+    return modal;
+  }
+
+  function closeAddWarpModal() {
+    const modal = document.getElementById("addWarpModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    modal.__sourceMap = null;
+  }
+
+  function setAddWarpStatus(message, isError = false) {
+    const status = document.getElementById("addWarpStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("error", isError);
+  }
+
+  function openAddWarpModal() {
     try {
       if (!rom) throw new Error("尚未加载 ROM。");
       if (!currentMap) throw new Error("请先选择地图。");
       const manager = window.RBEditorWarpEventManager;
       if (!manager?.addWarpEvent) throw new Error("Warp 管理器不可用。");
-      const index = manager.addWarpEvent(currentMap);
-      refreshAfterWarpArrayChange(index);
+
+      const storage = manager.getStorageInfo?.(currentMap);
+      if ((storage?.count ?? 0) >= (storage?.capacity ?? 10)) {
+        throw new Error(`当前地图传送点已达最大数量 ${storage?.capacity ?? 10}。`);
+      }
+
+      const events = typeof currentEvents !== "undefined" && Array.isArray(currentEvents) ? currentEvents : [];
+      const warps = events.filter(ev => ev.type === "warp");
+      const previous = warps[warps.length - 1] || {};
+      const modal = ensureAddWarpModal();
+      modal.__sourceMap = currentMap;
+      modal.querySelector("#addWarpModalSubtitle").textContent = getMapDisplayNameWithCode(currentMap);
+      modal.querySelector("#addWarpX").value = String(previous.x ?? 0);
+      modal.querySelector("#addWarpY").value = String(previous.y ?? 0);
+      modal.querySelector("#addWarpElevation").value = String(previous.elevation ?? 0);
+      modal.querySelector("#addWarpGroup").value = String(currentMap.mapGroup ?? 0);
+      modal.querySelector("#addWarpMap").value = String(currentMap.mapNum ?? 0);
+      modal.querySelector("#addWarpId").value = "0";
+      setAddWarpStatus("");
+      modal.classList.add("show");
+      modal.setAttribute("aria-hidden", "false");
+      modal.querySelector("#addWarpX").focus();
     } catch (err) {
       alert(err?.message || String(err));
+    }
+  }
+
+  function saveNewWarpEvent() {
+    const modal = document.getElementById("addWarpModal");
+    const sourceMap = modal?.__sourceMap;
+
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!modal || !sourceMap || sourceMap !== currentMap) {
+        throw new Error("当前地图已经变化，请关闭弹窗后重新新增传送点。");
+      }
+
+      const manager = window.RBEditorWarpEventManager;
+      if (!manager?.addWarpEvent) throw new Error("Warp 管理器不可用。");
+      const values = {
+        x: parseNum(modal.querySelector("#addWarpX")?.value, "x", -32768, 32767),
+        y: parseNum(modal.querySelector("#addWarpY")?.value, "y", -32768, 32767),
+        elevation: parseNum(modal.querySelector("#addWarpElevation")?.value, "elevation", 0, 0xFF),
+        mapGroup: parseNum(modal.querySelector("#addWarpGroup")?.value, "目标 Group", 0, 0xFF),
+        mapNum: parseNum(modal.querySelector("#addWarpMap")?.value, "目标 Map", 0, 0xFF),
+        warpId: parseNum(modal.querySelector("#addWarpId")?.value, "目标 warpId", 0, 0xFF),
+      };
+      const index = manager.addWarpEvent(sourceMap, values);
+      closeAddWarpModal();
+      refreshAfterWarpArrayChange(index);
+    } catch (err) {
+      setAddWarpStatus(err?.message || String(err), true);
     }
   }
 
@@ -848,6 +1491,7 @@
   }
 
   function showEventDetail(ev) {
+    eventTypeFilter = eventFilterKey(ev);
     selectedEventKey = eventKey(ev);
     renderDetailView(ev);
   }

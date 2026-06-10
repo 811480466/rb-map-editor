@@ -36,6 +36,12 @@
     return Math.max(-2147483648, Math.min(2147483647, Math.trunc(n)));
   }
 
+  function parseIntegerInRange(value, min, max) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < min || n > max) return null;
+    return n;
+  }
+
   function normalizeConnection(conn, fallbackIndex = 0) {
     return {
       index: fallbackIndex,
@@ -166,6 +172,132 @@
     panel.style.display = "none";
   }
 
+  function ensureAddConnectionModal() {
+    let modal = document.getElementById("addConnectionModal");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "addConnectionModal";
+    modal.className = "modal-backdrop";
+    modal.setAttribute("aria-hidden", "true");
+    modal.innerHTML = `
+      <div class="modal connector-create-modal" role="dialog" aria-modal="true" aria-labelledby="addConnectionModalTitle">
+        <div class="modal-header">
+          <div>
+            <h2 id="addConnectionModalTitle" class="modal-title">新增连接</h2>
+            <div id="addConnectionModalSubtitle" class="modal-subtitle"></div>
+          </div>
+          <button type="button" class="modal-close" data-action="close-add-connection" aria-label="关闭">×</button>
+        </div>
+        <form id="addConnectionForm">
+          <div class="modal-body">
+            <div class="connector-grid">
+              <label for="addConnDirection">方向</label>
+              <select id="addConnDirection">
+                ${[1,2,3,4,5,6].map(d => `<option value="${d}">${escapeHtml(connectionDirectionName(d))}</option>`).join("")}
+              </select>
+              <label for="addConnOffset">偏移</label>
+              <input id="addConnOffset" type="number" value="0" />
+              <label for="addConnGroup">目标 Group</label>
+              <input id="addConnGroup" type="number" min="0" max="255" value="0" />
+              <label for="addConnMap">目标 Map</label>
+              <input id="addConnMap" type="number" min="0" max="255" value="0" />
+            </div>
+            <div id="addConnectionStatus" class="connector-create-status"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="secondary-btn" data-action="cancel-add-connection">取消</button>
+            <button type="submit">保存</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const close = () => closeAddConnectionModal();
+    modal.querySelector("[data-action='close-add-connection']").onclick = close;
+    modal.querySelector("[data-action='cancel-add-connection']").onclick = close;
+    modal.addEventListener("click", event => {
+      if (event.target === modal) close();
+    });
+    modal.querySelector("#addConnectionForm").addEventListener("submit", event => {
+      event.preventDefault();
+      saveNewConnection();
+    });
+    return modal;
+  }
+
+  function closeAddConnectionModal() {
+    const modal = document.getElementById("addConnectionModal");
+    if (!modal) return;
+    modal.classList.remove("show");
+    modal.setAttribute("aria-hidden", "true");
+    modal.__sourceMap = null;
+  }
+
+  function setAddConnectionStatus(message, isError = false) {
+    const status = document.getElementById("addConnectionStatus");
+    if (!status) return;
+    status.textContent = message || "";
+    status.classList.toggle("error", isError);
+  }
+
+  function openAddConnectionModal() {
+    if (!currentMap) return;
+
+    const parsed = parseMapConnections(currentMap.connectionsPtr);
+    if ((parsed.list || []).length >= MANAGED_CONNECTION_CAPACITY) {
+      alert(`连接数量不能超过 ${MANAGED_CONNECTION_CAPACITY} 条。`);
+      return;
+    }
+
+    const modal = ensureAddConnectionModal();
+    modal.__sourceMap = currentMap;
+    modal.querySelector("#addConnectionModalSubtitle").textContent = getMapDisplayNameWithCode(currentMap);
+    modal.querySelector("#addConnDirection").value = "4";
+    modal.querySelector("#addConnOffset").value = "0";
+    modal.querySelector("#addConnGroup").value = String(currentMap.mapGroup ?? 0);
+    modal.querySelector("#addConnMap").value = String(currentMap.mapNum ?? 0);
+    setAddConnectionStatus("");
+    modal.classList.add("show");
+    modal.setAttribute("aria-hidden", "false");
+    modal.querySelector("#addConnDirection").focus();
+  }
+
+  function saveNewConnection() {
+    const modal = document.getElementById("addConnectionModal");
+    const sourceMap = modal?.__sourceMap;
+    if (!modal || !sourceMap || sourceMap !== currentMap) {
+      setAddConnectionStatus("当前地图已经变化，请关闭弹窗后重新新增连接。", true);
+      return;
+    }
+
+    const parsed = parseMapConnections(sourceMap.connectionsPtr);
+    const connections = (parsed.list || []).map(normalizeConnection);
+    if (connections.length >= MANAGED_CONNECTION_CAPACITY) {
+      setAddConnectionStatus(`连接数量不能超过 ${MANAGED_CONNECTION_CAPACITY} 条。`, true);
+      return;
+    }
+
+    const direction = parseIntegerInRange(modal.querySelector("#addConnDirection")?.value, 1, 6);
+    const connectionOffset = parseIntegerInRange(modal.querySelector("#addConnOffset")?.value, -2147483648, 2147483647);
+    const mapGroup = parseIntegerInRange(modal.querySelector("#addConnGroup")?.value, 0, 255);
+    const mapNum = parseIntegerInRange(modal.querySelector("#addConnMap")?.value, 0, 255);
+    if (![1, 2, 3, 4, 5, 6].includes(direction) || connectionOffset === null || mapGroup === null || mapNum === null) {
+      setAddConnectionStatus("连接参数格式不正确。", true);
+      return;
+    }
+
+    connections.push({ direction, connectionOffset, mapGroup, mapNum });
+
+    try {
+      rewriteConnectionsToManagedArray(sourceMap, connections);
+      closeAddConnectionModal();
+      refreshConnectorViews();
+    } catch (err) {
+      setAddConnectionStatus(err?.message || String(err), true);
+    }
+  }
+
   function updateConnection(index) {
     if (!currentMap) return;
 
@@ -192,28 +324,7 @@
   }
 
   function addConnection() {
-    if (!currentMap) return;
-
-    const parsed = parseMapConnections(currentMap.connectionsPtr);
-    const connections = (parsed.list || []).map(normalizeConnection);
-    if (connections.length >= MANAGED_CONNECTION_CAPACITY) {
-      alert(`连接数量不能超过 ${MANAGED_CONNECTION_CAPACITY} 条。`);
-      return;
-    }
-
-    connections.push({
-      direction: 4,
-      connectionOffset: 0,
-      mapGroup: currentMap.mapGroup ?? 0,
-      mapNum: currentMap.mapNum ?? 0,
-    });
-
-    try {
-      rewriteConnectionsToManagedArray(currentMap, connections);
-      refreshConnectorViews();
-    } catch (err) {
-      alert(err?.message || String(err));
-    }
+    openAddConnectionModal();
   }
 
   function deleteConnection(index) {
