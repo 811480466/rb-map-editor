@@ -613,6 +613,10 @@ function formatKnownScriptCommand(opcode, startOff) {
     args.buffer = r.args[0];
     args.textPtr = args.arg1;
     args.decodedText = decodeScriptTextPtr(r.args[1], 220);
+  } else if (opcode === 0x0F) {
+    args.wordIndex = r.args[0];
+    args.value = r.args[1];
+    args.valueHex = hex(r.args[1], 8);
   } else if (opcode === 0x4F || opcode === 0x50) {
     args.localId = r.args[0];
     args.movementPtr = args.arg1;
@@ -632,6 +636,32 @@ function formatKnownScriptCommand(opcode, startOff) {
   }
 
   return scriptLine(opcode, name, startOff, r.next, args, `${name}${displayArgs.length ? " " + displayArgs.join(" ") : ""}`);
+}
+
+function annotateLoadwordMessageTexts(commands) {
+  const messageStdIds = new Set([0x02, 0x03, 0x04, 0x05, 0x06]);
+
+  for (let i = 0; i < commands.length - 1; i++) {
+    const loadword = commands[i];
+    const callstd = commands[i + 1];
+    if (loadword?.name !== "loadword" || loadword.args?.wordIndex !== 0x00) continue;
+    if (callstd?.name !== "callstd" || !messageStdIds.has(callstd.args?.stdScript)) continue;
+
+    const ptr = loadword.args.value;
+    const off = ptrToOffset(ptr);
+    const decodedText = decodeScriptTextPtr(ptr, 320);
+    if (!decodedText) continue;
+
+    loadword.args.textPtr = {
+      ptr,
+      ptrHex: hex(ptr),
+      off,
+      offHex: off !== null ? hex(off) : null,
+    };
+    loadword.args.decodedText = decodedText;
+    loadword.args.messageStdScript = callstd.args.stdScript;
+    loadword.args.messageStdScriptName = callstd.args.stdScriptName;
+  }
 }
 
 function parseScriptBasic(scriptOff, options = {}) {
@@ -680,6 +710,8 @@ function parseScriptBasic(scriptOff, options = {}) {
       break;
     }
   }
+
+  annotateLoadwordMessageTexts(commands);
 
   if (commands.length >= maxCommands) warnings.push(`达到最大命令数 ${maxCommands}，已截断。`);
   if (consumed >= maxBytes) warnings.push(`达到最大解析字节数 ${maxBytes}，已截断。`);

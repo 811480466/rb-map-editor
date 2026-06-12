@@ -14,3 +14,7 @@
 Thumbs.db
 .vscode/
 .idea/
+
+# Vite / Electron
+node_modules/
+dist/

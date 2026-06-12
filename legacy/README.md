@@ -17,18 +17,15 @@ Pokémon Run&Bun 1.07 ROM 地图查看与分析工具。
 ## 文件结构
 
 ```text
-index.html
-css/style.css
-js/rom-reader.js
-js/text-codec.js
-js/map-header.js
-js/warp.js
-js/script-parser.js
-js/map-events.js
-js/tileset-renderer.js
-js/map-renderer.js
-js/block-info.js
-js/main.js
+desktop/            Vue 3 desktop shell
+electron/           Electron main process
+legacy/             Existing map editor
+  index.html
+  css/
+  data/
+  js/
+package.json
+vite.config.mjs
 ```
 
 ## 注意

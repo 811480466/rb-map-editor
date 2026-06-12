@@ -529,7 +529,7 @@
     body += inputField("unknown16", "unknown16", hex(ev.unknown16, 4), { hint: "u16" });
 
     if (ev.trainerBattle) {
-      body += field("trainerId", ev.trainerBattle.trainerId);
+      body += inputField("trainerId", "trainerId", ev.trainerBattle.trainerId, { hint: "u16；写入 trainerbattle 脚本参数" });
       body += field("battleType", ev.trainerBattle.battleType);
     }
 
@@ -663,6 +663,8 @@
         <button id="resetEventEditBtn" class="event-secondary-btn" type="button">撤销修改</button>
         ${ev.type === "warp" ? `<button id="deleteWarpEventBtn" class="event-danger-btn" type="button">删除传送点</button>` : ""}
         ${ev.type === "object" && ev.trainerBattle ? `<button id="deleteTrainerEventBtn" class="event-danger-btn" type="button">删除训练家</button>` : ""}
+        ${ev.type === "object" && !ev.trainerBattle ? `<button id="deleteObjectEventBtn" class="event-danger-btn" type="button">删除对象</button>` : ""}
+        ${ev.type === "bg" || ev.type === "coord" ? `<button id="deleteMapEventBtn" class="event-danger-btn" type="button">删除事件</button>` : ""}
       </div>
       <div id="eventEditStatus" class="event-edit-status"></div>
       <details class="event-debug">
@@ -677,6 +679,8 @@
     document.getElementById("resetEventEditBtn")?.addEventListener("click", () => renderDetailView(ev));
     document.getElementById("deleteWarpEventBtn")?.addEventListener("click", () => deleteWarpEvent(ev));
     document.getElementById("deleteTrainerEventBtn")?.addEventListener("click", () => deleteTrainerEvent(ev));
+    document.getElementById("deleteObjectEventBtn")?.addEventListener("click", () => deleteObjectEvent(ev));
+    document.getElementById("deleteMapEventBtn")?.addEventListener("click", () => deleteMapEvent(ev));
 
     for (const input of eventTab.querySelectorAll(".event-edit-input")) {
       input.addEventListener("input", () => setEditStatus("未应用修改。", ""));
@@ -738,6 +742,9 @@
       values.scriptPtr = parseNum(input.scriptPtr, "scriptPtr", 0, 0xFFFFFFFF);
       values.flagId = parseNum(input.flagId, "flagId", 0, 0xFFFF);
       values.unknown16 = parseNum(input.unknown16, "unknown16", 0, 0xFFFF);
+      if (ev.trainerBattle) {
+        values.trainerId = parseNum(input.trainerId, "trainerId", 0, 0xFFFF);
+      }
     } else if (ev.type === "warp") {
       values.warpId = parseNum(input.warpId, "warpId", 0, 0xFF);
       values.mapNum = parseNum(input.mapNum, "mapNum", 0, 0xFF);
@@ -793,6 +800,14 @@
 
   function writeObjectEvent(ev, values) {
     ensureWriteRange(ev.offset, 0x18);
+    let trainerScriptOff = null;
+    if (ev.trainerBattle && values.trainerId !== undefined) {
+      trainerScriptOff = ptrToOffset(values.scriptPtr);
+      if (!isValidOffset(trainerScriptOff, 4) || readU8(trainerScriptOff) !== 0x5C) {
+        throw new Error("训练家脚本地址无效，无法写入 trainerId。");
+      }
+    }
+
     writeByte(ev.offset + 0x00, values.localId);
     writeByte(ev.offset + 0x01, values.graphicsId);
     writeByte(ev.offset + 0x02, values.kind);
@@ -807,6 +822,10 @@
     writeDword(ev.offset + 0x10, values.scriptPtr);
     writeWord(ev.offset + 0x14, values.flagId);
     writeWord(ev.offset + 0x16, values.unknown16);
+
+    if (trainerScriptOff !== null) {
+      writeWord(trainerScriptOff + 0x02, values.trainerId);
+    }
   }
 
   function writeWarpEvent(ev, values) {
@@ -950,7 +969,7 @@
       },
       objectDefaults: {
         graphicsId: 0x3B,
-        movementType: 0x01,
+        movementType: 0x03,
         trainerType: 0,
         trainerRange: 0,
       },
@@ -1689,6 +1708,80 @@
       objects.splice(ev.index, 1);
       rewriteObjectArray(currentMap, objects, { capacity });
       refreshAfterTrainerArrayChange(null);
+    } catch (err) {
+      setEditStatus(err?.message || String(err), "error");
+    }
+  }
+
+  function deleteObjectEvent(ev) {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!ev || ev.type !== "object" || ev.trainerBattle) throw new Error("当前选中的不是普通对象。");
+
+      const objectsRaw = loadMapEvents(currentMap).filter(item => item.type === "object");
+      const current = objectsRaw[ev.index];
+      if (!current || current.trainerBattle || current.localId !== ev.localId) {
+        throw new Error("对象数据已变化，请重新选择后再删除。");
+      }
+
+      if (!confirm(`确定删除对象 #${ev.index} 吗？\n对象ID ${ev.localId}、事件Flag ${ev.flagId} 将从当前地图移除。`)) return;
+
+      const capacity = getObjectWritableCapacity(currentMap, objectsRaw.length);
+      const objects = objectsRaw.map(normalizeObjectEvent);
+      objects.splice(ev.index, 1);
+      rewriteObjectArray(currentMap, objects, { capacity });
+      refreshAfterObjectArrayChange(null);
+    } catch (err) {
+      setEditStatus(err?.message || String(err), "error");
+    }
+  }
+
+  function deleteMapEventArraySlot(header, ev) {
+    const configs = {
+      coord: { countKey: "coordCount", offKey: "coordOff", countByte: 0x02, size: COORD_EVENT_SIZE },
+      bg: { countKey: "bgCount", offKey: "bgOff", countByte: 0x03, size: BG_EVENT_SIZE },
+    };
+    const config = configs[ev?.type];
+    if (!config || !header?.events) throw new Error("当前选中的不是可删除事件。");
+
+    const count = header.events[config.countKey];
+    const dataOff = header.events[config.offKey];
+    const index = Number(ev.index);
+    if (!Number.isInteger(index) || index < 0 || index >= count) throw new Error("事件 index 无效。");
+    ensureWriteRange(dataOff, count * config.size);
+
+    for (let slot = index; slot < count - 1; slot++) {
+      const targetOff = dataOff + slot * config.size;
+      const sourceOff = targetOff + config.size;
+      for (let i = 0; i < config.size; i++) writeByte(targetOff + i, readU8(sourceOff + i));
+    }
+
+    const lastOff = dataOff + (count - 1) * config.size;
+    for (let i = 0; i < config.size; i++) writeByte(lastOff + i, 0);
+    writeByte(header.events.offset + config.countByte, count - 1);
+    header.events = parseMapEvents(header.events.offset);
+  }
+
+  function refreshAfterMapEventArrayChange() {
+    if (currentMap && typeof loadMapEvents === "function") currentEvents = loadMapEvents(currentMap);
+    if (currentMap && typeof renderMap === "function") renderMap(currentMap, currentEvents);
+    eventTypeFilter = "bgCoord";
+    selectedEventKey = null;
+    renderListView(currentEvents || []);
+  }
+
+  function deleteMapEvent(ev) {
+    try {
+      if (!rom) throw new Error("尚未加载 ROM。");
+      if (!currentMap) throw new Error("请先选择地图。");
+      if (!ev || (ev.type !== "bg" && ev.type !== "coord")) throw new Error("当前选中的不是背景或坐标事件。");
+
+      const typeName = ev.type === "bg" ? "背景事件" : "坐标事件";
+      if (!confirm(`确定删除${typeName} #${ev.index} 吗？\n后续同类事件的 index 会向前移动。`)) return;
+
+      deleteMapEventArraySlot(currentMap, ev);
+      refreshAfterMapEventArrayChange();
     } catch (err) {
       setEditStatus(err?.message || String(err), "error");
     }

@@ -131,6 +131,9 @@
         color: #64748b;
         font-size: 12px;
       }
+      .rb-searchable-dropdown-more {
+        cursor: pointer;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -162,7 +165,11 @@
       this.fieldName = options.fieldName || "";
       this.hiddenClassName = options.hiddenClassName || "";
       this.extraClassName = options.className || "";
-      this.renderLimit = Number.isInteger(options.renderLimit) ? options.renderLimit : DEFAULT_RENDER_LIMIT;
+      this.renderLimit = Math.max(1, Number.isInteger(options.renderLimit) ? options.renderLimit : DEFAULT_RENDER_LIMIT);
+      this.currentQuery = "";
+      this.filteredOptions = [];
+      this.visibleLimit = this.renderLimit;
+      this.moreEl = null;
       this.id = uid++;
       this.render();
     }
@@ -221,6 +228,7 @@
         this.toggle();
       });
       this.search.addEventListener("input", () => this.renderOptions(this.search.value));
+      this.optionBox.addEventListener("scroll", () => this.maybeLoadMoreOptions());
       this.menu.addEventListener("click", (e) => e.stopPropagation());
     }
 
@@ -237,15 +245,83 @@
       return String(this.getSearchText(item) || this.getLabel(item) || "").toLowerCase().includes(q);
     }
 
+    createOptionElement(item, selected) {
+      const value = this.getValue(item);
+      const label = document.createElement("label");
+      label.className = "rb-searchable-dropdown-option";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = this.valueToString(value) === selected;
+      checkbox.tabIndex = -1;
+
+      const text = document.createElement("span");
+      text.className = "rb-searchable-dropdown-option-text";
+      text.textContent = this.getLabel(item);
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      label.addEventListener("click", (e) => {
+        e.preventDefault();
+        this.select(value, item);
+      });
+      return label;
+    }
+
+    appendOptions(items, selected) {
+      for (const item of items) {
+        this.optionBox.appendChild(this.createOptionElement(item, selected));
+      }
+    }
+
+    updateMoreIndicator() {
+      this.moreEl?.remove();
+      this.moreEl = null;
+
+      const remaining = this.filteredOptions.length - this.visibleLimit;
+      if (remaining <= 0) return;
+
+      const more = document.createElement("div");
+      more.className = "rb-searchable-dropdown-more";
+      more.textContent = `还有 ${remaining} 项，向下滚动加载更多。`;
+      more.addEventListener("click", () => this.loadMoreOptions());
+      this.moreEl = more;
+      this.optionBox.appendChild(more);
+    }
+
+    loadMoreOptions() {
+      if (!this.optionBox || this.visibleLimit >= this.filteredOptions.length) return;
+      const selected = this.valueToString(this.value);
+      const nextLimit = Math.min(this.visibleLimit + this.renderLimit, this.filteredOptions.length);
+      const nextItems = this.filteredOptions.slice(this.visibleLimit, nextLimit);
+
+      this.moreEl?.remove();
+      this.moreEl = null;
+      this.appendOptions(nextItems, selected);
+      this.visibleLimit = nextLimit;
+      this.updateMoreIndicator();
+    }
+
+    maybeLoadMoreOptions() {
+      if (!this.optionBox || this.visibleLimit >= this.filteredOptions.length) return;
+      const distanceToBottom = this.optionBox.scrollHeight - this.optionBox.scrollTop - this.optionBox.clientHeight;
+      if (distanceToBottom > 32) return;
+      this.loadMoreOptions();
+    }
+
     renderOptions(query = "") {
       if (!this.optionBox) return;
       const selected = this.valueToString(this.value);
       const q = String(query || "").trim();
-      const filtered = this.options.filter(item => this.matches(item, q));
-      const shown = q ? filtered.slice(0, this.renderLimit) : filtered.slice(0, this.renderLimit);
+      this.currentQuery = q;
+      this.filteredOptions = this.options.filter(item => this.matches(item, q));
+      this.visibleLimit = Math.min(this.renderLimit, this.filteredOptions.length);
+      const shown = this.filteredOptions.slice(0, this.visibleLimit);
       this.optionBox.innerHTML = "";
+      this.moreEl = null;
+      this.optionBox.scrollTop = 0;
 
-      if (!filtered.length) {
+      if (!this.filteredOptions.length) {
         const empty = document.createElement("div");
         empty.className = "rb-searchable-dropdown-empty";
         empty.textContent = "无匹配项";
@@ -253,35 +329,8 @@
         return;
       }
 
-      for (const item of shown) {
-        const value = this.getValue(item);
-        const label = document.createElement("label");
-        label.className = "rb-searchable-dropdown-option";
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = this.valueToString(value) === selected;
-        checkbox.tabIndex = -1;
-
-        const text = document.createElement("span");
-        text.className = "rb-searchable-dropdown-option-text";
-        text.textContent = this.getLabel(item);
-
-        label.appendChild(checkbox);
-        label.appendChild(text);
-        label.addEventListener("click", (e) => {
-          e.preventDefault();
-          this.select(value, item);
-        });
-        this.optionBox.appendChild(label);
-      }
-
-      if (filtered.length > shown.length) {
-        const more = document.createElement("div");
-        more.className = "rb-searchable-dropdown-more";
-        more.textContent = `还有 ${filtered.length - shown.length} 项，继续输入可缩小范围。`;
-        this.optionBox.appendChild(more);
-      }
+      this.appendOptions(shown, selected);
+      this.updateMoreIndicator();
     }
 
     select(value, item = null) {
