@@ -4,8 +4,11 @@ export const TILE_RENDER_SCALE = 2
 export const TILE_CELL_SIZE = 16 * TILE_RENDER_SCALE
 export const MAX_METATILES_PER_TILESET = 512
 export const SECONDARY_METATILE_START = 0x200
-export const FALLBACK_SECONDARY_TILE_START = 0x200
+export const SECONDARY_TILE_START = 0x200
 export const MAX_BG_TILE_COUNT = 0x400
+export const METATILE_SIZE = 16
+export const PRIMARY_PALETTE_COUNT = 6
+export const TOTAL_FIELD_PALETTE_COUNT = 13
 
 let tilesetAssetCache = new WeakMap()
 
@@ -143,7 +146,17 @@ export function readRomTiles(rom, tilesetStruct) {
 export function readRomMetatiles(rom, tilesetStruct) {
   const offset = pointerToOffset(tilesetStruct?.metatilesPointer)
   if (!isValidRange(rom, offset, 16)) return null
-  return rom.readBytes(offset, rom.size - offset)
+
+  const attributesOffset = pointerToOffset(tilesetStruct?.metatileAttributesPointer)
+  const maxSize = MAX_METATILES_PER_TILESET * METATILE_SIZE
+  const sizeByAttributes =
+    attributesOffset !== null && attributesOffset > offset
+      ? attributesOffset - offset
+      : maxSize
+  const size = Math.min(maxSize, sizeByAttributes, rom.size - offset)
+
+  if (size <= 0) return null
+  return rom.readBytes(offset, size - (size % METATILE_SIZE))
 }
 
 export function loadRomTilesetAsset(rom, tilesetPointer) {
@@ -176,13 +189,8 @@ export function loadRomTilesetAsset(rom, tilesetPointer) {
   return asset
 }
 
-export function getSecondaryTileStart(primaryAsset) {
-  const primaryTileCount = primaryAsset?.tileCount
-  if (Number.isInteger(primaryTileCount) && primaryTileCount > 0 && primaryTileCount < MAX_BG_TILE_COUNT) {
-    return primaryTileCount
-  }
-
-  return FALLBACK_SECONDARY_TILE_START
+export function getSecondaryTileStart() {
+  return SECONDARY_TILE_START
 }
 
 export function resolveRomTileSource(primaryAsset, secondaryAsset, preferredAsset, tileId) {
@@ -241,6 +249,14 @@ export function getSecondaryTileIdMode(primaryAsset, asset) {
   return asset.tileIdMode
 }
 
+export function resolveRomPaletteAsset(primaryAsset, secondaryAsset, fallbackAsset, paletteId) {
+  if (paletteId >= PRIMARY_PALETTE_COUNT && paletteId < TOTAL_FIELD_PALETTE_COUNT) {
+    return secondaryAsset || fallbackAsset || primaryAsset
+  }
+
+  return primaryAsset || fallbackAsset || secondaryAsset
+}
+
 export function fillImageData(imageData, color = [255, 255, 255, 255]) {
   for (let index = 0; index < imageData.data.length; index += 4) {
     imageData.data[index] = color[0]
@@ -261,11 +277,12 @@ export function drawRom8x8TileToImageData(
   verticalFlip,
   transparentZero,
   scale = TILE_RENDER_SCALE,
+  paletteAsset = asset,
 ) {
   const tileOffset = tileId * 32
   if (!asset || tileOffset < 0 || tileOffset + 32 > asset.tiles.length) return false
 
-  const palette = asset.palettes[paletteId] || asset.palettes[0]
+  const palette = paletteAsset?.palettes?.[paletteId] || asset.palettes[paletteId] || asset.palettes[0]
   if (!palette) return false
 
   for (let y = 0; y < 8; y += 1) {
@@ -332,6 +349,7 @@ export function drawRomMetatileToImageData(
     const paletteId = (entry >> 12) & 0x0f
     const [x, y] = positions[layer]
     const resolved = resolveRomTileSource(primaryAsset, secondaryAsset, metatileAsset, rawTileId)
+    const paletteAsset = resolveRomPaletteAsset(primaryAsset, secondaryAsset, metatileAsset, paletteId)
 
     if (options.skipBlankTiles && rawTileId === 0 && paletteId === 0 && !horizontalFlip && !verticalFlip) {
       continue
@@ -353,6 +371,7 @@ export function drawRomMetatileToImageData(
       verticalFlip,
       transparentZero ?? (layer >= 4),
       scale,
+      paletteAsset,
     )
   }
 
