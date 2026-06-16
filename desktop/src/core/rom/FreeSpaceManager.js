@@ -1,4 +1,5 @@
 import AllocationRange from "./AllocationRange"
+import { align as alignOffset, formatHex } from "@/util"
 
 export default class FreeSpaceManager {
   /** @type {import("./Rom").default} */
@@ -29,8 +30,7 @@ export default class FreeSpaceManager {
    * @returns {number}
    */
   align(offset, alignment = 4) {
-    if (alignment <= 1) return offset
-    return Math.ceil(offset / alignment) * alignment
+    return alignOffset(offset, alignment)
   }
 
   /**
@@ -88,7 +88,7 @@ export default class FreeSpaceManager {
    */
   reserve(offset, size, options = {}) {
     if (this.isReserved(offset, size)) {
-      throw new Error(`ROM range is already reserved: 0x${offset.toString(16)}`)
+      throw new Error(`ROM range is already reserved: ${formatHex(offset)}`)
     }
 
     const range = new AllocationRange(offset, size, options)

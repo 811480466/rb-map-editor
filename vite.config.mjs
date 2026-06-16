@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./desktop/src") // @ 指向 src
+      "@": path.resolve(rootDir, "desktop/src") // @ 指向 src
     }
   },
   server: {

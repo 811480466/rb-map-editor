@@ -39,12 +39,63 @@
         </div>
       </div>
       <div class="editor-mode-box">
-        <component :is="currentEditorComponent" />
+        <MapEditView
+          v-if="isEditorMode(editorModeCodes.mapEdit)"
+          :project="project" :current-map="currentMap" :map-edit-state="mapEditState"
+          @map-updated="handleMapUpdated"
+          @map-edit-state-updated="handleMapEditStateUpdated"
+        />
+        <MapEventView
+          v-else-if="isEditorMode(editorModeCodes.mapEvent)"
+          :project="project" :current-map="currentMap" :map-event-state="mapEventState" :revision="mapEventRevision"
+          @map-event-state-updated="handleMapEventStateUpdated"
+        />
+        <MapConnectionView
+          v-else-if="isEditorMode(editorModeCodes.mapConnection)"
+          :project="project" :current-map="currentMap" :maps="maps" :revision="mapConnectionRevision"
+          @select-map="selectMap"
+        />
+        <MapMetadataView
+          v-else-if="isEditorMode(editorModeCodes.mapMetadata)"
+          :project="project" :current-map="currentMap" :maps="maps"
+          @map-updated="handleMapUpdated"
+        />
+        <WildPokemonView
+          v-else-if="isEditorMode(editorModeCodes.wildPokemon)"
+          :project="project" :current-map="currentMap" :maps="maps"
+          @map-updated="handleMapUpdated"
+        />
       </div>
     </div>
     <!--右侧面板-->
     <div class="right-panel">
-      右侧面板
+      <MapEditPanel
+        v-if="isEditorMode(editorModeCodes.mapEdit)"
+        :project="project" :current-map="currentMap" :map-edit-state="mapEditState"
+        @map-edit-state-updated="handleMapEditStateUpdated"
+      />
+      <MapInfoPanel
+        v-else-if="isEditorMode(editorModeCodes.mapMetadata)"
+        :project="project" :current-map="currentMap"
+      />
+      <MapEventPanel
+        v-else-if="isEditorMode(editorModeCodes.mapEvent)"
+        :project="project" :current-map="currentMap" :maps="maps" :map-event-state="mapEventState" :revision="mapEventRevision"
+        @map-event-state-updated="handleMapEventStateUpdated"
+        @map-updated="handleMapUpdated"
+        @select-map="selectMap"
+      />
+      <MapConnectionPanel
+        v-else-if="isEditorMode(editorModeCodes.mapConnection)"
+        :project="project" :current-map="currentMap" :maps="maps" :revision="mapConnectionRevision"
+        @map-updated="handleMapUpdated"
+        @select-map="selectMap"
+      />
+      <WildPokemonPanel
+        v-else-if="isEditorMode(editorModeCodes.wildPokemon)"
+        :project="project" :current-map="currentMap"
+      />
+      <div v-else class="right-panel-placeholder">右侧面板</div>
     </div>
   </div>
 </template>
@@ -52,11 +103,16 @@
 <script>
 import { ElMessage } from "element-plus"
 import { RomExportService, RomImportService } from "@/core"
+import MapConnectionPanel from "./components/map-connection-panel/index.vue"
 import MapConnectionView from "./components/map-connection/index.vue"
+import MapEditPanel from "./components/map-edit-panel/index.vue"
 import MapEditView from "./components/map-edit/index.vue"
+import MapEventPanel from "./components/map-event-panel/index.vue"
 import MapEventView from "./components/map-event/index.vue"
+import MapInfoPanel from "./components/map-info/index.vue"
 import MapListView from "./components/map-list/index.vue"
 import MapMetadataView from "./components/map-metadata/index.vue"
+import WildPokemonPanel from "./components/wild-pokemon-panel/index.vue"
 import WildPokemonView from "./components/wild-pokemon/index.vue"
 
 const EDITOR_MODE_MAP_EDIT = "map-edit"
@@ -71,10 +127,15 @@ export default {
   name: "HomeView",
   components: {
     MapConnectionView,
+    MapConnectionPanel,
+    MapEditPanel,
     MapEditView,
+    MapEventPanel,
     MapEventView,
+    MapInfoPanel,
     MapListView,
     MapMetadataView,
+    WildPokemonPanel,
     WildPokemonView,
   },
   data() {
@@ -84,24 +145,42 @@ export default {
       currentMap: null,
       selectedMapKey: "",
       importing: false,
+      mapConnectionRevision: 0,
+      mapEventRevision: 0,
+      mapEditState: {
+        mouseMode: "view",
+        showGrid: true,
+        activeTab: "tiles",
+        selectedBlockId: 0,
+        collision: {
+          elevation: 3,
+          value: 1,
+          opacity: 42,
+        },
+      },
+      mapEventState: {
+        filter: "all",
+        selectedKey: "",
+        showGrid: true,
+      },
+      editorModeCodes: {
+        mapEdit: EDITOR_MODE_MAP_EDIT,
+        mapEvent: EDITOR_MODE_MAP_EVENT,
+        mapConnection: EDITOR_MODE_MAP_CONNECTION,
+        mapMetadata: EDITOR_MODE_MAP_METADATA,
+        wildPokemon: EDITOR_MODE_WILD_POKEMON,
+      },
       currentEditorMode: EDITOR_MODE_MAP_EDIT,
       editorModeList: [
-        { code: EDITOR_MODE_MAP_EDIT, label: "地图编辑", component: "MapEditView" },
-        { code: EDITOR_MODE_MAP_EVENT, label: "地图事件", component: "MapEventView" },
-        { code: EDITOR_MODE_MAP_CONNECTION, label: "地图连接器", component: "MapConnectionView" },
-        { code: EDITOR_MODE_MAP_METADATA, label: "地图元数据", component: "MapMetadataView" },
-        { code: EDITOR_MODE_WILD_POKEMON, label: "野生宝可梦", component: "WildPokemonView" },
+        { code: EDITOR_MODE_MAP_EDIT, label: "地图编辑" },
+        { code: EDITOR_MODE_MAP_EVENT, label: "地图事件" },
+        { code: EDITOR_MODE_MAP_CONNECTION, label: "地图连接器" },
+        { code: EDITOR_MODE_MAP_METADATA, label: "地图元数据" },
+        { code: EDITOR_MODE_WILD_POKEMON, label: "野生宝可梦" },
       ],
     }
   },
-  computed: {
-    currentEditorComponent() {
-      const currentMode = this.editorModeList.find(item => item.code === this.currentEditorMode)
-      return currentMode?.component || "MapEditView"
-    },
-  },
   mounted() {
-
   },
   methods: {
     openRomFile() {
@@ -143,9 +222,40 @@ export default {
       this.currentMap = map
       this.selectedMapKey = map?.key || ""
     },
+    handleMapUpdated(payload = {}) {
+      const selectedKey = payload.key || this.selectedMapKey
+      if (!this.project?.mapRepository) return
+
+      if (payload.dirty) this.project.markDirty()
+      if (String(payload.field || "").startsWith("connection")) this.mapConnectionRevision += 1
+      if (String(payload.field || "").startsWith("events")) this.mapEventRevision += 1
+      if (payload.reloadMaps === false) return
+
+      this.maps = this.project.mapRepository.loadMapList()
+      this.selectMap(this.maps.find(map => map.key === selectedKey) || this.maps[0] || null)
+    },
+    handleMapEditStateUpdated(patch = {}) {
+      this.mapEditState = {
+        ...this.mapEditState,
+        ...patch,
+        collision: {
+          ...this.mapEditState.collision,
+          ...(patch.collision || {}),
+        },
+      }
+    },
+    handleMapEventStateUpdated(patch = {}) {
+      this.mapEventState = {
+        ...this.mapEventState,
+        ...patch,
+      }
+    },
     // 切换选择模式
     selectEditMode(code) {
       this.currentEditorMode = code
+    },
+    isEditorMode(code) {
+      return this.currentEditorMode === code
     },
   },
 }

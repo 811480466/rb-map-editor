@@ -1,4 +1,4 @@
-import { offsetToPointer, pointerToOffset } from "../../util/pointer"
+import { formatHex, offsetToPointer, pointerToOffset } from "@/util"
 
 export default class Rom {
   /** @type {string | null} */
@@ -47,7 +47,7 @@ export default class Rom {
     }
 
     if (offset < 0 || offset + size > this.size) {
-      throw new Error(`ROM 范围越界: offset=0x${offset.toString(16)}, size=${size}`)
+      throw new Error(`ROM 范围越界: offset=${formatHex(offset)}, size=${size}`)
     }
   }
 

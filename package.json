@@ -8,22 +8,50 @@
     "vite": "vite",
     "electron": "electron .",
     "build": "vite build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "lint": "eslint \"desktop/src/**/*.{js,vue}\" \"electron/**/*.cjs\" vite.config.mjs --max-warnings=0",
     "lint:fix": "eslint \"desktop/src/**/*.{js,vue}\" \"electron/**/*.cjs\" vite.config.mjs --fix"
   },
-  "dependencies": {
-    "element-plus": "^2.14.1",
-    "vue": "^3.5.0"
+  "build": {
+    "appId": "com.rbmapeditor.desktop",
+    "productName": "RB Map Editor",
+    "compression": "maximum",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
+  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "concurrently": "^9.0.0",
     "electron": "^39.0.0",
+    "electron-builder": "^26.0.12",
+    "element-plus": "^2.14.1",
     "eslint": "^9.0.0",
     "eslint-plugin-vue": "^10.0.0",
     "sass": "^1.100.0",
     "vite": "^7.0.0",
+    "vue": "^3.5.0",
     "vue-eslint-parser": "^10.0.0",
     "wait-on": "^9.0.0"
   }

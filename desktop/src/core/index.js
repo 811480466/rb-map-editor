@@ -1,5 +1,6 @@
 export * from "./event"
 export * from "./map"
+export * from "./pokemon"
 export * from "./project"
 export * from "./profiles"
 export * from "./rom"

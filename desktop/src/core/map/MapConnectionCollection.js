@@ -2,7 +2,13 @@ import RomEntity from "../rom/RomEntity"
 
 export default class MapConnectionCollection extends RomEntity {
   /** @type {number} */
+  pointer = 0
+
+  /** @type {number} */
   count = 0
+
+  /** @type {number} */
+  dataPointer = 0
 
   /** @type {number} */
   connectionsPointer = 0
@@ -18,6 +24,9 @@ export default class MapConnectionCollection extends RomEntity {
 
   /** @type {boolean} */
   migrated = false
+
+  /** @type {string} */
+  status = "none"
 
   /**
    * @param {import("./MapConnection").default} connection

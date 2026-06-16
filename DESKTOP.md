@@ -43,4 +43,18 @@ npm run build
 
 The Vite build is written to `dist/`. The complete `legacy/` directory is still copied to `dist/legacy/` for later migration work.
 
-Packaging an installer is intentionally not configured in this first version.
+## Package
+
+Build an unpacked desktop app:
+
+```powershell
+npm run pack
+```
+
+Build Windows installer and portable app:
+
+```powershell
+npm run dist
+```
+
+The packaged output is written to `release/`.

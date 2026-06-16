@@ -129,4 +129,15 @@
 .right-panel {
   overflow: hidden;
   border-left: 1px solid #d8e2ef;
+  background: #fff;
+}
+
+.right-panel-placeholder {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #8aa0bd;
+  font-size: 13px;
+  font-weight: 700;
 }

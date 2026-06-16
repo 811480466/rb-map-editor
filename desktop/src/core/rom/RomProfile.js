@@ -1,4 +1,4 @@
-import { GBA_ROM_POINTER_BASE } from "../../util/pointer"
+import { GBA_ROM_POINTER_BASE } from "@/util"
 
 export default class RomProfile {
   /** @type {string} */
@@ -13,7 +13,7 @@ export default class RomProfile {
   /** @type {number} */
   gbaBase = GBA_ROM_POINTER_BASE
 
-  /** @type {Record<string, number>} */
+  /** @type {Record<string, number | number[]>} */
   addresses = {}
 
   /** @type {Record<string, number>} */
@@ -34,7 +34,7 @@ export default class RomProfile {
    *   name?: string,
    *   version?: string,
    *   gbaBase?: number,
-   *   addresses?: Record<string, number>,
+   *   addresses?: Record<string, number | number[]>,
    *   counts?: Record<string, number>,
    *   structureSizes?: Record<string, number>,
    *   limits?: Record<string, number>,
@@ -55,8 +55,8 @@ export default class RomProfile {
 
   /**
    * @param {string} name
-   * @param {number | null} [fallback]
-   * @returns {number | null}
+   * @param {number | number[] | null} [fallback]
+   * @returns {number | number[] | null}
    */
   getAddress(name, fallback = null) {
     return this.addresses[name] ?? fallback

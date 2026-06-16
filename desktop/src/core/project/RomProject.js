@@ -1,4 +1,6 @@
 import MapRepository from "../map/MapRepository"
+import MapConnectionRepository from "../map/MapConnectionRepository"
+import MapEventRepository from "../map/MapEventRepository"
 import ScriptRepository from "../script/ScriptRepository"
 import TilesetRepository from "../tileset/TilesetRepository"
 import WildEncounterRepository from "../wild/WildEncounterRepository"
@@ -17,6 +19,12 @@ export default class RomProject {
 
   /** @type {MapRepository | null} */
   mapRepository = null
+
+  /** @type {MapConnectionRepository | null} */
+  mapConnectionRepository = null
+
+  /** @type {MapEventRepository | null} */
+  mapEventRepository = null
 
   /** @type {TilesetRepository | null} */
   tilesetRepository = null
@@ -41,6 +49,8 @@ export default class RomProject {
    *   textCodec?: PokemonTextCodec,
    *   textCodecOptions?: object,
    *   mapRepository?: MapRepository,
+   *   mapConnectionRepository?: MapConnectionRepository,
+   *   mapEventRepository?: MapEventRepository,
    *   tilesetRepository?: TilesetRepository,
    *   wildEncounterRepository?: WildEncounterRepository,
    *   scriptRepository?: ScriptRepository
@@ -54,6 +64,8 @@ export default class RomProject {
     })
     this.textCodec = options.textCodec || new PokemonTextCodec(options.textCodecOptions)
     this.mapRepository = options.mapRepository || new MapRepository(this)
+    this.mapConnectionRepository = options.mapConnectionRepository || new MapConnectionRepository(this)
+    this.mapEventRepository = options.mapEventRepository || new MapEventRepository(this)
     this.tilesetRepository = options.tilesetRepository || new TilesetRepository(this)
     this.wildEncounterRepository = options.wildEncounterRepository || new WildEncounterRepository(this)
     this.scriptRepository = options.scriptRepository || new ScriptRepository(this)
@@ -64,6 +76,8 @@ export default class RomProject {
    */
   initialize() {
     this.mapRepository.initialize()
+    this.mapConnectionRepository.initialize()
+    this.mapEventRepository.initialize()
     this.tilesetRepository.initialize()
     this.wildEncounterRepository.initialize()
     this.scriptRepository.initialize()
