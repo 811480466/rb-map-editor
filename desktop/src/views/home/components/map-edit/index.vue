@@ -2,7 +2,7 @@
   <div class="map-edit-view">
     <div class="map-edit-toolbar">
       <span class="toolbar-label">工具栏</span>
-      <el-radio-group :model-value="mapEditState.mouseMode" size="small" @change="updateEditState({ mouseMode: $event })">
+      <el-radio-group :model-value="mapEditState.mouseMode"  @change="updateEditState({ mouseMode: $event })">
         <el-radio value="view">查看</el-radio>
         <el-radio value="pick">拾取</el-radio>
         <el-radio value="paint">绘制</el-radio>

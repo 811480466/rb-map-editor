@@ -89,3 +89,113 @@ body,
     color: $primary-text-color;
   }
 }
+
+// =========================
+// Element Plus 弹窗统一皮肤
+// =========================
+.el-overlay {
+  background-color: rgba(15, 23, 42, 0.44) !important;
+  backdrop-filter: blur(1px);
+}
+
+.el-overlay-dialog {
+  padding: 48px 16px 24px;
+}
+
+.el-overlay-dialog > .el-dialog {
+  --el-dialog-bg-color: #ffffff;
+  --el-dialog-border-radius: 8px;
+
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto !important;
+  border: 1px solid #d8e2ef;
+  border-radius: 8px;
+  box-shadow:
+    0 18px 42px rgba(15, 23, 42, 0.22),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.el-overlay-dialog > .el-dialog::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2563eb, #0f766e);
+  content: "";
+}
+
+.el-dialog__header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  padding: 18px 52px 14px 20px;
+  border-bottom: 1px solid #e4edf7;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
+}
+
+.el-dialog__title {
+  color: #153b78;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.el-dialog__headerbtn {
+  top: 13px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+.el-dialog__headerbtn:hover {
+  background: #eef4ff;
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.el-dialog__body {
+  padding: 18px 20px 20px;
+  background: #ffffff;
+}
+
+.el-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px 16px;
+  border-top: 1px solid #e4edf7;
+  background: #f8fafc;
+}
+
+.el-dialog__footer .el-button {
+  min-width: 72px;
+  margin-left: 0;
+}
+
+.el-dialog .el-input__wrapper,
+.el-dialog .el-select__wrapper,
+.el-dialog .el-input-number .el-input__wrapper {
+  min-height: 34px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px #cfd8e6 inset;
+}
+
+.el-dialog .el-input__wrapper:hover,
+.el-dialog .el-select__wrapper:hover,
+.el-dialog .el-input-number .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #94a3b8 inset;
+}
+
+.el-dialog .el-input__wrapper.is-focus,
+.el-dialog .el-select__wrapper.is-focused {
+  box-shadow:
+    0 0 0 1px #2563eb inset,
+    0 0 0 3px rgba(37, 99, 235, 0.12);
+}

@@ -1,43 +1,49 @@
 <template>
   <div class="map-event-view">
     <div class="map-event-toolbar">
-      <span class="toolbar-label">事件工具</span>
-      <el-segmented
-        :model-value="mapEventState.filter"
-        :options="filterOptions"
-        size="small"
-        @change="updateEventState({ filter: $event })"
-      />
       <el-checkbox :model-value="mapEventState.showGrid" @change="updateEventState({ showGrid: Boolean($event) })">
         网格
       </el-checkbox>
-      <span class="event-summary">
-        OBJ {{ eventCounts.object }} / TRAINER {{ eventCounts.trainer }} / WARP {{ eventCounts.warp }} /
-        EVENT {{ eventCounts.coord + eventCounts.bg }}
-      </span>
+      <el-checkbox
+        :model-value="mapEventState.showMovementRange"
+        @change="updateEventState({ showMovementRange: Boolean($event) })"
+      >
+        移动范围
+      </el-checkbox>
     </div>
 
     <el-empty v-if="!project" description="请先导入 ROM" />
     <el-empty v-else-if="!mapHeader" description="请先选择地图" />
 
     <div v-else class="map-stage">
-      <div ref="viewport" class="map-viewport" @wheel="handleViewportWheel">
-        <div class="map-canvas-wrap" :style="canvasWrapStyle" @mouseleave="hideTooltip">
-          <canvas ref="mapCanvas" class="map-canvas" :style="canvasStyle" @click="handleCanvasClick"></canvas>
+      <div ref="viewport" class="map-viewport" @wheel="handleViewportWheel" @mouseleave="clearHover">
+        <div class="map-canvas-wrap" :style="canvasWrapStyle">
+          <canvas
+            ref="mapCanvas"
+            class="map-canvas"
+            :style="canvasStyle"
+            @click="handleCanvasClick"
+            @mousemove="handleCanvasMove"
+          ></canvas>
+          <div v-if="hoverCell" class="cell-marker hover" :style="cellMarkerStyle(hoverCell)"></div>
 
           <div
             v-for="event in visibleEvents"
             :key="eventKey(event)"
             class="event-marker"
-            :class="[eventMarkerClass(event), { selected: isSelectedEvent(event) }]"
+            :class="[eventMarkerClass(event), { selected: isSelectedEvent(event), sprite: Boolean(eventSprite(event)) }]"
             :style="eventMarkerStyle(event)"
-            :title="eventTitle(event)"
             @click.stop="selectEvent(event)"
-            @mouseenter="showEventTooltip($event, event)"
-            @mousemove="moveTooltip($event)"
-            @mouseleave="hideTooltip"
+            @mousemove="handleCanvasMove"
           >
-            {{ eventMarkerText(event) }}
+            <img
+              v-if="eventSprite(event)"
+              class="event-sprite-image"
+              :src="eventSprite(event).dataUrl"
+              :alt="eventTitle(event)"
+              draggable="false"
+            />
+            <template v-else>{{ eventMarkerText(event) }}</template>
           </div>
 
           <div
@@ -51,6 +57,16 @@
       </div>
     </div>
 
+    <div v-if="project && mapHeader" class="legend-bar">
+      <div class="event-legend">
+        <span class="legend-item"><span class="legend-badge object">N</span>NPC/物体</span>
+        <span class="legend-item"><span class="legend-badge trainer">B</span>训练家</span>
+        <span class="legend-item"><span class="legend-badge warp">W</span>传送点</span>
+        <span class="legend-item"><span class="legend-badge bg">S</span>背景事件</span>
+        <span class="legend-item"><span class="legend-badge coord">T</span>触发事件</span>
+      </div>
+    </div>
+
     <div v-if="tooltip.visible" class="event-tooltip" :style="tooltipStyle">
       {{ tooltip.text }}
     </div>
@@ -59,7 +75,6 @@
 
 <script>
 import {
-  MAP_EVENT_TYPE_OPTIONS,
   TILE_CELL_SIZE,
   getMapEventKey,
   getMapEventTypeLabel,
@@ -105,15 +120,10 @@ export default {
         top: 0,
         text: "",
       },
+      hoverCell: null,
     }
   },
   computed: {
-    filterOptions() {
-      return MAP_EVENT_TYPE_OPTIONS.map(option => ({
-        label: option.label,
-        value: option.value,
-      }))
-    },
     mapHeader() {
       if (!this.project?.mapRepository || !this.currentMap) return null
       return this.project.mapRepository.getMapHeader(this.currentMap.mapGroup, this.currentMap.mapNum)
@@ -126,22 +136,28 @@ export default {
       return this.eventCollection?.all || []
     },
     visibleEvents() {
-      return this.allEvents.filter(event => this.matchesFilter(event))
+      return this.allEvents
     },
     movementRangeEvents() {
+      if (!this.mapEventState.showMovementRange) return []
       return this.visibleEvents.filter(event =>
         event.type === "object" &&
         (Number(event.movementRangeX) > 0 || Number(event.movementRangeY) > 0)
       )
     },
-    eventCounts() {
-      return {
-        object: this.allEvents.filter(event => event.type === "object" && !event.trainerBattle).length,
-        trainer: this.allEvents.filter(event => event.type === "object" && event.trainerBattle).length,
-        warp: this.allEvents.filter(event => event.type === "warp").length,
-        coord: this.allEvents.filter(event => event.type === "coord").length,
-        bg: this.allEvents.filter(event => event.type === "bg").length,
-      }
+    eventSprites() {
+      const repository = this.project?.objectEventGraphicsRepository
+      const sprites = new Map()
+      if (!repository) return sprites
+
+      this.visibleEvents.forEach((event) => {
+        if (event.type !== "object") return
+        const graphicsId = Number(event.graphicsId)
+        if (!Number.isInteger(graphicsId) || sprites.has(graphicsId)) return
+        sprites.set(graphicsId, repository.getSprite(graphicsId))
+      })
+
+      return sprites
     },
     canvasWrapStyle() {
       return {
@@ -184,7 +200,7 @@ export default {
     },
     currentMap() {
       this.updateEventState({ selectedKey: "" })
-      this.hideTooltip()
+      this.clearHover()
     },
   },
   mounted() {
@@ -209,20 +225,12 @@ export default {
         }
       })
     },
-    matchesFilter(event) {
-      const filter = this.mapEventState.filter || "all"
-      if (filter === "all") return true
-      if (filter === "trainer") return event.type === "object" && event.trainerBattle
-      if (filter === "object") return event.type === "object" && !event.trainerBattle
-      return event.type === filter
-    },
     eventKey(event) {
       return getMapEventKey(event)
     },
     selectEvent(event) {
       this.updateEventState({
         selectedKey: this.eventKey(event),
-        filter: this.mapEventState.filter || "all",
       })
     },
     isSelectedEvent(event) {
@@ -241,6 +249,9 @@ export default {
       return event.type
     },
     eventMarkerStyle(event) {
+      const sprite = this.eventSprite(event)
+      if (sprite) return this.eventSpriteMarkerStyle(event, sprite)
+
       const cellSize = TILE_CELL_SIZE * this.zoom
       const pad = Math.max(3, Math.round(cellSize * 0.16))
       return {
@@ -249,6 +260,21 @@ export default {
         width: `${Math.max(12, cellSize - pad * 2)}px`,
         height: `${Math.max(12, cellSize - pad * 2)}px`,
         fontSize: `${Math.max(10, Math.round(cellSize * 0.42))}px`,
+      }
+    },
+    eventSprite(event) {
+      if (event.type !== "object") return null
+      return this.eventSprites.get(Number(event.graphicsId)) || null
+    },
+    eventSpriteMarkerStyle(event, sprite) {
+      const cellSize = TILE_CELL_SIZE * this.zoom
+      const width = Math.max(8, Math.round(sprite.renderWidth * this.zoom))
+      const height = Math.max(8, Math.round(sprite.renderHeight * this.zoom))
+      return {
+        left: `${Math.round(event.x * cellSize + cellSize / 2 - width / 2)}px`,
+        top: `${Math.round(event.y * cellSize + cellSize - height)}px`,
+        width: `${width}px`,
+        height: `${height}px`,
       }
     },
     movementRangeStyle(event) {
@@ -268,6 +294,37 @@ export default {
 
       const hit = [...this.visibleEvents].reverse().find(item => item.x === cell.x && item.y === cell.y)
       if (hit) this.selectEvent(hit)
+    },
+    handleCanvasMove(event) {
+      const cell = this.getCellFromEvent(event)
+      if (!cell) {
+        this.clearHover()
+        return
+      }
+
+      const hit = this.findTopEventAtCell(cell)
+      this.hoverCell = {
+        ...cell,
+        elevation: hit ? hit.elevation : "-",
+      }
+      this.tooltip = {
+        visible: true,
+        left: event.clientX + 14,
+        top: event.clientY + 14,
+        text: this.formatHoverCellTooltip(this.hoverCell),
+      }
+    },
+    findTopEventAtCell(cell) {
+      return [...this.visibleEvents].reverse().find(event => event.x === cell.x && event.y === cell.y) || null
+    },
+    cellMarkerStyle(cell) {
+      const cellSize = TILE_CELL_SIZE * this.zoom
+      return {
+        left: `${cell.x * cellSize}px`,
+        top: `${cell.y * cellSize}px`,
+        width: `${cellSize}px`,
+        height: `${cellSize}px`,
+      }
     },
     getCellFromEvent(event) {
       const canvas = this.$refs.mapCanvas
@@ -311,27 +368,26 @@ export default {
       return Math.round(clamped * 1000) / 1000
     },
     eventTitle(event) {
-      return [
+      const lines = [
         `${getMapEventTypeLabel(event)} #${event.index}`,
         `x:${event.x} y:${event.y} elevation:${event.elevation}`,
         `offset:${formatHex(event.offset)}`,
+      ]
+      if (event.type === "object") lines.push(`graphicsId:${formatHex(event.graphicsId, 2)}`)
+      return lines.join("\n")
+    },
+    formatHoverCellTooltip(cell) {
+      return [
+        `x:${cell.x} y:${cell.y}`,
+        `z:${cell.elevation}`,
       ].join("\n")
-    },
-    showEventTooltip(event, mapEvent) {
-      this.tooltip = {
-        visible: true,
-        left: event.clientX + 14,
-        top: event.clientY + 14,
-        text: this.eventTitle(mapEvent),
-      }
-    },
-    moveTooltip(event) {
-      if (!this.tooltip.visible) return
-      this.tooltip.left = event.clientX + 14
-      this.tooltip.top = event.clientY + 14
     },
     hideTooltip() {
       this.tooltip.visible = false
+    },
+    clearHover() {
+      this.hoverCell = null
+      this.hideTooltip()
     },
   },
 }
@@ -341,7 +397,7 @@ export default {
 .map-event-view {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -358,23 +414,9 @@ export default {
   background: #fff;
 }
 
-.toolbar-label {
-  color: #1d4ed8;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.event-summary {
-  margin-left: auto;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 .map-stage {
   min-height: 0;
-  padding: 64px 10px 16px;
+  padding: 16px 10px 10px;
   overflow: hidden;
 }
 
@@ -393,6 +435,19 @@ export default {
 .map-canvas {
   display: block;
   image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+.cell-marker {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.cell-marker.hover {
+  border: 2px solid rgba(37, 99, 235, 0.72);
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .event-marker {
@@ -409,6 +464,20 @@ export default {
   font-weight: 900;
   line-height: 1;
   user-select: none;
+}
+
+.event-marker.sprite {
+  border: 0;
+  background: transparent;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.35));
+}
+
+.event-sprite-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 .event-marker.object {
@@ -431,10 +500,19 @@ export default {
   background: #ea580c;
 }
 
+.event-marker.sprite.object,
+.event-marker.sprite.trainer {
+  background: transparent;
+}
+
 .event-marker.selected {
   z-index: 4;
   outline: 3px solid rgba(250, 204, 21, 0.95);
   outline-offset: 2px;
+}
+
+.event-marker.sprite.selected {
+  border-radius: 3px;
 }
 
 .movement-range {
@@ -447,6 +525,66 @@ export default {
 
 .movement-range.selected {
   border-color: rgba(250, 204, 21, 0.9);
+}
+
+.legend-bar {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #d8e2ef;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.event-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.legend-badge {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.legend-badge.object {
+  background: #2563eb;
+}
+
+.legend-badge.trainer {
+  background: #dc2626;
+}
+
+.legend-badge.warp {
+  background: #9333ea;
+}
+
+.legend-badge.coord {
+  background: #16a34a;
+}
+
+.legend-badge.bg {
+  background: #ea580c;
 }
 
 .event-tooltip {

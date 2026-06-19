@@ -124,7 +124,7 @@ export default {
   emits: ["select-map"],
   data() {
     return {
-      showGrid: true,
+      showGrid: false,
       canvasSize: {
         width: 0,
         height: 0,

@@ -462,7 +462,7 @@ export function drawMetatilePreviewToCanvas(canvas, blockId, header, options = {
 
 export function drawMapGrid(ctx, width, height, cellSize = TILE_CELL_SIZE) {
   ctx.save()
-  ctx.strokeStyle = "rgba(15, 23, 42, 0.24)"
+  ctx.strokeStyle = "#000000"
   ctx.lineWidth = 1
 
   for (let x = 0; x <= width; x += 1) {

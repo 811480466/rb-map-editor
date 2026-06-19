@@ -149,7 +149,7 @@ export default {
       mapEventRevision: 0,
       mapEditState: {
         mouseMode: "view",
-        showGrid: true,
+        showGrid: false,
         activeTab: "tiles",
         selectedBlockId: 0,
         collision: {
@@ -161,7 +161,8 @@ export default {
       mapEventState: {
         filter: "all",
         selectedKey: "",
-        showGrid: true,
+        showGrid: false,
+        showMovementRange: false,
       },
       editorModeCodes: {
         mapEdit: EDITOR_MODE_MAP_EDIT,

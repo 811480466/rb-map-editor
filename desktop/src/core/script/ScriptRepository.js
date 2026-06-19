@@ -1,4 +1,5 @@
 import Script from "./Script"
+import ScriptAnalyzer from "./ScriptAnalyzer"
 
 export default class ScriptRepository {
   /** @type {import("../project/RomProject").default | null} */
@@ -16,6 +17,9 @@ export default class ScriptRepository {
   /** @type {boolean} */
   initialized = false
 
+  /** @type {ScriptAnalyzer | null} */
+  analyzer = null
+
   /**
    * @param {import("../project/RomProject").default} project
    */
@@ -29,6 +33,7 @@ export default class ScriptRepository {
    * @returns {this}
    */
   initialize() {
+    this.analyzer = new ScriptAnalyzer(this.project)
     this.initialized = true
     return this
   }
@@ -69,7 +74,37 @@ export default class ScriptRepository {
    */
   clear() {
     this.scripts.clear()
+    this.analyzer = null
     this.initialized = false
     return this
+  }
+
+  /**
+   * @param {number} offset
+   * @param {object} options
+   * @returns {ReturnType<ScriptAnalyzer["parseScript"]>}
+   */
+  analyzeScript(offset, options = {}) {
+    if (!this.analyzer) this.analyzer = new ScriptAnalyzer(this.project)
+    return this.analyzer.parseScript(offset, options)
+  }
+
+  /**
+   * @param {ReturnType<ScriptAnalyzer["parseScript"]>} analysis
+   * @returns {ReturnType<ScriptAnalyzer["collectTextEntries"]>}
+   */
+  collectTextEntries(analysis) {
+    if (!this.analyzer) this.analyzer = new ScriptAnalyzer(this.project)
+    return this.analyzer.collectTextEntries(analysis)
+  }
+
+  /**
+   * @param {number} offset
+   * @param {number} length
+   * @returns {string}
+   */
+  formatHexDump(offset, length = 0x100) {
+    if (!this.analyzer) this.analyzer = new ScriptAnalyzer(this.project)
+    return this.analyzer.formatHexDump(offset, length)
   }
 }

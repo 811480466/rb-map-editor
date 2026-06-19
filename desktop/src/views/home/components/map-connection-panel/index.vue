@@ -59,7 +59,7 @@
 
         <div class="connector-grid">
           <label>方向</label>
-          <el-select v-model="row.direction" size="small">
+          <el-select v-model="row.direction">
             <el-option
               v-for="option in directionOptions" :key="option.value"
               :label="option.label" :value="option.value"
@@ -69,12 +69,12 @@
           <label>偏移</label>
           <el-input-number
             v-model="row.connectionOffset" :min="-2147483648" :max="2147483647"
-            :step="1" size="small" controls-position="right"
+            :step="1" controls-position="right"
           />
 
           <label>目标地图</label>
           <el-select
-            v-model="row.targetKey" filterable clearable size="small"
+            v-model="row.targetKey" filterable clearable 
             @change="updateTargetFromKey(row, $event)"
           >
             <el-option
@@ -86,14 +86,14 @@
           <label>目标Group</label>
           <el-input-number
             v-model="row.mapGroup" :min="0" :max="255"
-            :step="1" size="small" controls-position="right"
+            :step="1" controls-position="right"
             @change="updateTargetFromNumbers(row)"
           />
 
           <label>目标Map</label>
           <el-input-number
             v-model="row.mapNum" :min="0" :max="255"
-            :step="1" size="small" controls-position="right"
+            :step="1" controls-position="right"
             @change="updateTargetFromNumbers(row)"
           />
         </div>
@@ -104,14 +104,14 @@
         </div>
 
         <div class="connector-actions">
-          <el-button type="primary" size="small" @click="saveConnection(row)">保存修改</el-button>
+          <el-button type="primary" @click="saveConnection(row)">保存修改</el-button>
           <el-button
-            size="small" :disabled="!targetMapFor(row)"
+            :disabled="!targetMapFor(row)"
             @click="jumpToTarget(row)"
           >
             跳转目标地图
           </el-button>
-          <el-button type="danger" plain size="small" @click="deleteConnection(row)">
+          <el-button type="danger" plain @click="deleteConnection(row)">
             删除
           </el-button>
         </div>
@@ -571,15 +571,25 @@ export default {
 }
 
 .connection-dialog-subtitle {
-  margin: -6px 0 14px;
-  color: #64748b;
+  margin: 0 0 16px;
+  padding: 9px 10px;
+  border: 1px solid #d8e2ef;
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
+  background: #f8fbff;
+  color: #475569;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .dialog-grid {
   grid-template-columns: 82px minmax(0, 1fr);
-  gap: 12px 10px;
+  gap: 12px;
+}
+
+.dialog-grid label {
+  color: #475569;
 }
 
 .dialog-grid :deep(.el-input-number),

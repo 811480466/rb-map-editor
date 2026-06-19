@@ -1,5 +1,6 @@
 export { default as Script } from "./Script"
 export { default as ScriptArgument } from "./ScriptArgument"
+export { default as ScriptAnalyzer } from "./ScriptAnalyzer"
 export { default as ScriptCommand } from "./ScriptCommand"
 export { default as ScriptRepository } from "./ScriptRepository"
 export { default as TrainerBattleCommand, TRAINER_BATTLE_POINTER_FIELDS } from "./TrainerBattleCommand"
