@@ -10,9 +10,6 @@
       <el-checkbox :model-value="mapEditState.showGrid" @change="updateEditState({ showGrid: Boolean($event) })">
         网格
       </el-checkbox>
-      <span v-if="renderStats.rendered" class="render-status">
-        {{ renderStats.fallback ? "Fallback" : "ROM tileset" }}
-      </span>
     </div>
 
     <el-empty v-if="!project" description="请先导入 ROM" />

@@ -298,7 +298,7 @@ export default {
   padding: 12px 14px;
   border-bottom: 1px solid #e4edf7;
   color: #153b78;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
 }
 

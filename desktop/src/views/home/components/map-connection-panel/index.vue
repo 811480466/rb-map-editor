@@ -123,10 +123,6 @@
       destroy-on-close append-to-body :close-on-click-modal="false"
       @closed="resetAddDraft"
     >
-      <div class="connection-dialog-subtitle">
-        {{ currentMap?.name }} / group={{ mapHeader?.mapGroup }} map={{ mapHeader?.mapNum }}
-      </div>
-
       <div class="connector-grid dialog-grid">
         <label>方向</label>
         <el-select v-model="addDraft.direction">

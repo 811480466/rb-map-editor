@@ -13,6 +13,13 @@ export function createRunAndBunProfile() {
     addresses: {
       mapGroups: 0x00552ab4,
       regionMapEntries: 0x006a1960,
+      multichoiceTable: 0x006859d0,
+      multichoiceTablePointerReferences: [
+        0x00100d74,
+        0x00101250,
+      ],
+      multichoiceExitText: 0x006efd17,
+      moveNameTable: 0x003a4486,
       wildEncounterHeaderPointerReferences: [
         0x000d31d8,
         0x000d39dc,
@@ -43,11 +50,19 @@ export function createRunAndBunProfile() {
       wildEncounterHeader: 0x14,
       wildEncounterInfo: 0x08,
       wildPokemon: 0x04,
+      multichoiceEntry: 0x08,
+      multichoiceItem: 0x08,
+      moveName: 0x0d,
     },
     limits: {
       maxMapWidth: 512,
       maxMapHeight: 512,
       maxFallbackMapsPerGroup: 512,
+      multichoiceOriginalCount: 0x7f,
+      multichoiceExpandedCount: 0x100,
+      moveTutorMenuStartId: 0x7f,
+      moveTutorMenuSlots: 10,
+      moveTutorMenuSkillCapacity: 10,
     },
     freeSpaceStart: 0x01900000,
   })

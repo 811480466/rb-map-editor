@@ -317,7 +317,7 @@ export default {
 .wild-title,
 .section-title {
   color: #153b78;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
 }
 

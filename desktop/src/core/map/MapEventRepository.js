@@ -2,6 +2,8 @@ import { formatHex, offsetToPointer, pointerToOffset } from "@/util"
 import BgEvent from "../event/BgEvent"
 import CoordEvent from "../event/CoordEvent"
 import ObjectEvent from "../event/ObjectEvent"
+import { getObjectEventScriptTemplate } from "../event/ObjectEventScriptTemplates"
+import { getObjectEventTrainerTemplate } from "../event/ObjectEventTrainerTemplates"
 import WarpEvent from "../event/WarpEvent"
 import TrainerBattleCommand, { TRAINER_BATTLE_POINTER_FIELDS } from "../script/TrainerBattleCommand"
 import MapEventCollection from "./MapEventCollection"
@@ -12,6 +14,7 @@ export const WARP_EVENT_SIZE = 0x08
 export const COORD_EVENT_SIZE = 0x10
 export const BG_EVENT_SIZE = 0x0c
 export const MAP_EVENT_EXTRA_CAPACITY = 8
+export const MOVE_TUTOR_MENU_RESERVED_LABEL = "MoveTutorMultichoiceTable"
 
 export const MAP_EVENT_TYPE_OPTIONS = [
   { value: "all", label: "全部" },
@@ -369,9 +372,341 @@ export default class MapEventRepository {
       .map(event => this.normalizeEventValues(event))
     if (items.length >= config.max) throw new Error(`${getMapEventTypeLabel({ type: normalizedType })}数量已达上限`)
 
-    items.push(this.normalizeNewEventValues(normalizedType, values, header, items))
+    const newValues = type === "trainer"
+      ? this.prepareNewTrainerValues(values, items)
+      : normalizedType === "object"
+        ? this.prepareNewObjectValues(values, items)
+        : values
+    items.push(this.normalizeNewEventValues(normalizedType, newValues, header, items))
     this.rewriteEventArray(header, normalizedType, items)
     return this.parseEvents(header)
+  }
+
+  prepareNewObjectValues(values = {}, existing = []) {
+    const localId = this.assertNewObjectLocalIdAvailable(values.localId ?? this.getNextLocalId(existing), existing)
+    const nextValues = { ...values, localId }
+    if (!nextValues.templateId) return nextValues
+
+    const template = getObjectEventScriptTemplate(nextValues.templateId)
+    this.assertNewObjectTemplateFlags(template, nextValues)
+
+    const defaults = template.objectDefaults || {}
+    const templateValues = template.id === "multiMoveTutorNpc"
+      ? this.prepareMultiMoveTutorMenuValues(nextValues)
+      : nextValues
+    const textPointers = this.allocateObjectTemplateTexts(template, templateValues)
+    const scriptOffset = this.allocateObjectTemplateScript(template, templateValues, textPointers)
+
+    return {
+      ...templateValues,
+      graphicsId: values.graphicsId ?? defaults.graphicsId ?? 0,
+      movementType: values.movementType ?? defaults.movementType ?? 0,
+      movementRangeX: values.movementRangeX ?? defaults.movementRangeX ?? 0,
+      movementRangeY: values.movementRangeY ?? defaults.movementRangeY ?? 0,
+      trainerType: values.trainerType ?? defaults.trainerType ?? 0,
+      trainerRangeOrBerryTreeId: values.trainerRangeOrBerryTreeId ?? defaults.trainerRangeOrBerryTreeId ?? 0,
+      scriptPointer: offsetToPointer(scriptOffset),
+    }
+  }
+
+  allocateObjectTemplateTexts(template, values = {}) {
+    const pointers = {}
+    const fields = template.textFields || []
+
+    fields.forEach(field => {
+      const fallback = {
+        giftText: "Please take good care of this Pokemon!",
+        receivedText: "You already received this Pokemon.",
+        tutorText: "Which Pokemon should learn this move?",
+        tutorPromptText: "Which Pokemon should learn this move?",
+      }[field] || "..."
+      const offset = this.allocateTemplateBytes(
+        this.encodeTemplateText(values[field] || fallback),
+        `ObjectText:${template.id || "object"}:${field}`,
+      )
+      pointers[`${field}Ptr`] = offsetToPointer(offset)
+    })
+
+    return pointers
+  }
+
+  allocateObjectTemplateScript(template, values = {}, pointers = {}) {
+    const allocator = this.project?.freeSpaceManager
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用")
+
+    const label = `ObjectScript:${template.id || values.templateId || "object"}`
+    const draftBytes = template.build(values, pointers, {})
+    const allocation = allocator.allocate(draftBytes.length, { label })
+    const bytes = template.build(values, pointers, {
+      scriptOffset: allocation.offset,
+      scriptPointer: offsetToPointer(allocation.offset),
+    })
+
+    if (bytes.length !== draftBytes.length) throw new Error("对象模板脚本长度不稳定")
+    bytes.forEach((byte, index) => this.rom.writeByte(allocation.offset + index, byte))
+    return allocation.offset
+  }
+
+  prepareNewTrainerValues(values = {}, existing = []) {
+    const localId = this.assertNewObjectLocalIdAvailable(values.localId, existing)
+
+    const template = getObjectEventTrainerTemplate(values.templateId)
+    const textPointers = this.allocateTrainerTemplateTexts(template, values)
+    const scriptOffset = this.allocateTrainerTemplateScript(template, values, textPointers)
+
+    return {
+      ...values,
+      localId,
+      trainerType: values.trainerType ?? 1,
+      trainerRangeOrBerryTreeId: values.trainerRangeOrBerryTreeId ?? values.trainerRange ?? 3,
+      scriptPointer: offsetToPointer(scriptOffset),
+      eventFlag: values.eventFlag ?? 0,
+    }
+  }
+
+  prepareMultiMoveTutorMenuValues(values = {}) {
+    const moveIds = this.parseMoveTutorMoveIds(values.moveIds || values.moveId)
+    const config = this.getMultichoiceTableConfig()
+    if (!config) return { ...values, exitChoice: moveIds.length }
+    if (moveIds.length > config.skillCapacity) {
+      throw new Error(`技能列表最多支持 ${config.skillCapacity} 个技能`)
+    }
+
+    const tableOffset = this.ensureMoveTutorMultichoiceTable(config)
+    const slot = this.findMoveTutorMenuSlot(tableOffset, config)
+    this.writeMoveTutorMenuSlot(tableOffset, slot, moveIds, config)
+
+    return {
+      ...values,
+      menuId: slot.menuId,
+      exitChoice: moveIds.length,
+    }
+  }
+
+  getMultichoiceTableConfig() {
+    const tableOffset = this.profile?.getAddress("multichoiceTable")
+    const pointerReferences = this.profile?.getAddress("multichoiceTablePointerReferences", [])
+    const exitTextOffset = this.profile?.getAddress("multichoiceExitText")
+    const moveNameTableOffset = this.profile?.getAddress("moveNameTable")
+
+    if (
+      !Number.isInteger(tableOffset)
+      || !Array.isArray(pointerReferences)
+      || !pointerReferences.length
+      || !Number.isInteger(exitTextOffset)
+      || !Number.isInteger(moveNameTableOffset)
+    ) {
+      return null
+    }
+
+    const tableEntrySize = this.profile?.getStructureSize("multichoiceEntry", 0x08) ?? 0x08
+    const itemEntrySize = this.profile?.getStructureSize("multichoiceItem", 0x08) ?? 0x08
+    const moveNameSize = this.profile?.getStructureSize("moveName", 0x0d) ?? 0x0d
+    const originalCount = this.profile?.getLimit("multichoiceOriginalCount", 0x7f) ?? 0x7f
+    const expandedCount = this.profile?.getLimit("multichoiceExpandedCount", 0x100) ?? 0x100
+    const menuStartId = this.profile?.getLimit("moveTutorMenuStartId", 0x7f) ?? 0x7f
+    const menuSlots = this.profile?.getLimit("moveTutorMenuSlots", 10) ?? 10
+    const skillCapacity = this.profile?.getLimit("moveTutorMenuSkillCapacity", 10) ?? 10
+    const optionCapacity = skillCapacity + 1
+
+    return {
+      tableOffset,
+      pointerReferences,
+      exitTextOffset,
+      moveNameTableOffset,
+      tableEntrySize,
+      itemEntrySize,
+      moveNameSize,
+      originalCount,
+      expandedCount,
+      expandedTableSize: expandedCount * tableEntrySize,
+      menuStartId,
+      menuSlots,
+      skillCapacity,
+      optionCapacity,
+      listPoolSize: menuSlots * optionCapacity * itemEntrySize,
+    }
+  }
+
+  ensureMoveTutorMultichoiceTable(config) {
+    const activeOffset = this.getActiveMultichoiceTableOffset(config)
+    if (activeOffset !== config.tableOffset) {
+      this.reserveActiveMoveTutorMenuRange(activeOffset, config)
+      return activeOffset
+    }
+
+    const allocationSize = config.expandedTableSize + config.listPoolSize
+    const allocation = this.project?.freeSpaceManager?.allocate(allocationSize, {
+      label: MOVE_TUTOR_MENU_RESERVED_LABEL,
+      alignment: 4,
+    })
+    if (!allocation) throw new Error("空白区管理器不可用")
+
+    this.rom.fill(allocation.offset, allocationSize, 0x00)
+    this.rom.writeBytes(
+      allocation.offset,
+      this.rom.readBytes(config.tableOffset, config.originalCount * config.tableEntrySize),
+    )
+    config.pointerReferences.forEach(offset => {
+      this.rom.writePointer(offset, offsetToPointer(allocation.offset))
+    })
+
+    return allocation.offset
+  }
+
+  getActiveMultichoiceTableOffset(config) {
+    const oldPointer = offsetToPointer(config.tableOffset)
+    const pointers = config.pointerReferences.map(offset => this.rom.readPointer(offset))
+    const activePointer = pointers[0]
+
+    if (pointers.some(pointer => pointer !== activePointer)) {
+      throw new Error("multichoice 表指针引用不一致，暂时不能自动扩展")
+    }
+
+    if (activePointer === oldPointer) return config.tableOffset
+
+    const activeOffset = pointerToOffset(activePointer)
+    if (!this.isValidOffset(activeOffset, config.expandedTableSize)) {
+      throw new Error("当前 multichoice 表指针无效")
+    }
+
+    return activeOffset
+  }
+
+  reserveActiveMoveTutorMenuRange(tableOffset, config) {
+    const allocator = this.project?.freeSpaceManager
+    const size = config.expandedTableSize + config.listPoolSize
+    if (!allocator || allocator.isReserved(tableOffset, size)) return
+    allocator.reserve(tableOffset, size, {
+      label: MOVE_TUTOR_MENU_RESERVED_LABEL,
+    })
+  }
+
+  findMoveTutorMenuSlot(tableOffset, config) {
+    for (let index = 0; index < config.menuSlots; index += 1) {
+      const menuId = config.menuStartId + index
+      if (menuId >= config.expandedCount) break
+
+      const entryOffset = tableOffset + menuId * config.tableEntrySize
+      const pointer = this.rom.readPointer(entryOffset)
+      const count = this.rom.readByte(entryOffset + 0x04)
+      if (pointer === 0 || count === 0) {
+        return {
+          index,
+          menuId,
+          entryOffset,
+          listOffset: tableOffset + config.expandedTableSize + index * config.optionCapacity * config.itemEntrySize,
+        }
+      }
+    }
+
+    throw new Error(`技能教学菜单槽已用完，最多支持 ${config.menuSlots} 组`)
+  }
+
+  writeMoveTutorMenuSlot(tableOffset, slot, moveIds, config) {
+    if (!this.isValidOffset(slot.listOffset, config.optionCapacity * config.itemEntrySize)) {
+      throw new Error("技能教学菜单列表地址无效")
+    }
+
+    this.rom.fill(slot.listOffset, config.optionCapacity * config.itemEntrySize, 0x00)
+    moveIds.forEach((moveId, index) => {
+      const itemOffset = slot.listOffset + index * config.itemEntrySize
+      this.rom.writePointer(itemOffset, this.getMoveNamePointer(moveId, config))
+      this.rom.writeDword(itemOffset + 0x04, 0)
+    })
+
+    const exitOffset = slot.listOffset + moveIds.length * config.itemEntrySize
+    this.rom.writePointer(exitOffset, offsetToPointer(config.exitTextOffset))
+    this.rom.writeDword(exitOffset + 0x04, 0)
+
+    this.rom.writePointer(slot.entryOffset, offsetToPointer(slot.listOffset))
+    this.rom.writeByte(slot.entryOffset + 0x04, moveIds.length + 1)
+    this.rom.writeByte(slot.entryOffset + 0x05, 0)
+    this.rom.writeByte(slot.entryOffset + 0x06, 0)
+    this.rom.writeByte(slot.entryOffset + 0x07, 0)
+  }
+
+  getMoveNamePointer(moveId, config) {
+    const nameOffset = config.moveNameTableOffset + moveId * config.moveNameSize
+    if (this.isValidOffset(nameOffset, config.moveNameSize)) return offsetToPointer(nameOffset)
+
+    const fallbackOffset = this.allocateTemplateBytes(
+      this.encodeTemplateText(`Move ${moveId}`),
+      `MoveTutorMenuText:${moveId}`,
+    )
+    return offsetToPointer(fallbackOffset)
+  }
+
+  parseMoveTutorMoveIds(value) {
+    const values = Array.isArray(value)
+      ? value
+      : String(value || "")
+        .split(/[\s,;，；、]+/)
+        .filter(Boolean)
+    const moveIds = values
+      .map(item => Number(item))
+      .filter(item => Number.isInteger(item) && item > 0 && item <= 0xffff)
+    if (!moveIds.length) throw new Error("技能列表至少需要 1 个技能 ID")
+    return moveIds
+  }
+
+  allocateTrainerTemplateTexts(template, values = {}) {
+    const pointers = {}
+    const fields = template.textFields || ["introText", "defeatText", "postBattleText"]
+
+    fields.forEach(field => {
+      const offset = this.allocateTemplateBytes(
+        this.encodeTemplateText(values[field] || this.getTrainerTemplateTextFallback(field, values)),
+        `TrainerText:${template.id || "trainer"}:${field}`,
+      )
+      pointers[`${field}Ptr`] = offsetToPointer(offset)
+    })
+
+    pointers.introPtr = pointers.introTextPtr
+    pointers.defeatPtr = pointers.defeatTextPtr
+    pointers.postBattlePtr = pointers.postBattleTextPtr
+    return pointers
+  }
+
+  allocateTrainerTemplateScript(template, values = {}, pointers = {}) {
+    const allocator = this.project?.freeSpaceManager
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用")
+
+    const label = `TrainerBattleScript:${template.id || values.templateId || "simpleSingle"}`
+    const draftBytes = template.build(values, pointers, {})
+    const allocation = allocator.allocate(draftBytes.length, { label })
+    const bytes = template.build(values, pointers, {
+      scriptOffset: allocation.offset,
+      scriptPointer: offsetToPointer(allocation.offset),
+    })
+
+    if (bytes.length !== draftBytes.length) throw new Error("训练家模板脚本长度不稳定")
+    bytes.forEach((byte, index) => this.rom.writeByte(allocation.offset + index, byte))
+    return allocation.offset
+  }
+
+  getTrainerTemplateTextFallback(field, values = {}) {
+    return {
+      introText: "Let's battle!",
+      defeatText: "I lost!",
+      postBattleText: values.defeatText || "Let's battle again sometime!",
+      receivedText: "I hope that item helps you.",
+    }[field] || "..."
+  }
+
+  allocateTemplateBytes(bytes, label) {
+    const allocator = this.project?.freeSpaceManager
+    if (!allocator?.allocate) throw new Error("空白区管理器不可用")
+
+    const allocation = allocator.allocate(bytes.length, { label })
+    bytes.forEach((byte, index) => this.rom.writeByte(allocation.offset + index, byte))
+    return allocation.offset
+  }
+
+  encodeTemplateText(text) {
+    const codec = this.project?.textCodec
+    if (!codec?.encode) throw new Error("文本编码器不可用")
+    return codec.encode(String(text))
   }
 
   /**
@@ -455,7 +790,7 @@ export default class MapEventRepository {
 
   writeCoordEvent(event, values) {
     if (!this.isValidOffset(event.offset, COORD_EVENT_SIZE)) {
-      throw new Error(`坐标事件写入范围无效: ${formatHex(event.offset)}`)
+      throw new Error(`触发事件写入范围无效: ${formatHex(event.offset)}`)
     }
 
     this.writeCommonEventFields(event, values)
@@ -617,6 +952,98 @@ export default class MapEventRepository {
       if (!used.has(id)) return id
     }
     return 1
+  }
+
+  getNextAvailableGlobalObjectFlag() {
+    const used = new Set()
+
+    for (const header of this.project?.mapRepository?.mapHeaders?.values?.() || []) {
+      let events = null
+      try {
+        events = this.parseEvents(header)
+      } catch {
+        events = null
+      }
+
+      events?.objects?.forEach(event => {
+        const flag = Number(event.eventFlag)
+        if (Number.isInteger(flag) && flag > 0) used.add(flag)
+      })
+    }
+
+    for (let flag = 1; flag <= 0xffff; flag += 1) {
+      if (!used.has(flag)) return flag
+    }
+
+    return 1
+  }
+
+  findGlobalObjectFlagRefs(flagId) {
+    const id = Number(flagId)
+    if (!Number.isInteger(id)) return []
+
+    const refs = []
+    for (const header of this.project?.mapRepository?.mapHeaders?.values?.() || []) {
+      let events = null
+      try {
+        events = this.parseEvents(header)
+      } catch {
+        events = null
+      }
+
+      events?.objects?.forEach(event => {
+        if (Number(event.eventFlag) === id) refs.push({ header, event })
+      })
+    }
+
+    return refs
+  }
+
+  assertNewObjectLocalIdAvailable(localId, existing = []) {
+    const id = Number(localId)
+    if (!Number.isInteger(id) || id < 0 || id > 0xff) {
+      throw new Error("对象ID 必须是 0 ~ 255 的整数")
+    }
+    if (existing.some(event => Number(event.localId) === id)) {
+      throw new Error(`对象ID ${id} 已在当前地图使用`)
+    }
+    return id
+  }
+
+  assertNewObjectFlagAvailable(flagId) {
+    const id = Number(flagId)
+    if (!Number.isInteger(id) || id <= 0 || id > 0xffff) {
+      throw new Error("事件Flag 必须是 1 ~ 65535 的整数")
+    }
+
+    const refs = this.findGlobalObjectFlagRefs(id)
+    if (refs.length) {
+      const first = refs[0]
+      throw new Error(`事件Flag ${id} 已被使用：OBJ #${first.event.index}`)
+    }
+  }
+
+  assertNewObjectTemplateFlags(template, values = {}) {
+    const eventFlag = Number(values.eventFlag ?? 0)
+    if (!Number.isInteger(eventFlag) || eventFlag < 0 || eventFlag > 0xffff) {
+      throw new Error("事件Flag 必须是 0 ~ 65535 的整数")
+    }
+
+    if (template?.id === "pokemonGiftNpc" || template?.id === "randomPokemonGiftNpc") {
+      const scriptFlag = Number(values.scriptFlag)
+      if (!Number.isInteger(scriptFlag) || scriptFlag <= 0 || scriptFlag > 0xffff) {
+        throw new Error("领取Flag 必须是 1 ~ 65535 的整数")
+      }
+      if (eventFlag > 0) this.assertNewObjectFlagAvailable(eventFlag)
+      return
+    }
+
+    if (template?.id === "singleMoveTutorNpc" || template?.id === "multiMoveTutorNpc") {
+      if (eventFlag > 0) this.assertNewObjectFlagAvailable(eventFlag)
+      return
+    }
+
+    this.assertNewObjectFlagAvailable(eventFlag)
   }
 
   getEventsByArrayType(collection, type) {

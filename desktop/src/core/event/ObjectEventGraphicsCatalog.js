@@ -75,8 +75,8 @@ export const OBJECT_EVENT_GRAPHICS = [
   { id: 73, macro: "SPENSER", name: "宇康" },
   { id: 74, macro: "NOLAND", name: "达拉" },
   { id: 75, macro: "LUCY", name: "小蓟" },
-  { id: 76, macro: "UNUSED_NATU_DOLL", name: "未使用天然雀玩偶" },
-  { id: 77, macro: "UNUSED_MAGNEMITE_DOLL", name: "未使用小磁怪玩偶" },
+  { id: 76, macro: "UNUSED_NATU_DOLL", name: "技能机" },
+  { id: 77, macro: "UNUSED_MAGNEMITE_DOLL", name: "进化石头" },
   { id: 78, macro: "UNUSED_SQUIRTLE_DOLL", name: "未使用杰尼龟玩偶" },
   { id: 79, macro: "UNUSED_WOOPER_DOLL", name: "未使用乌波玩偶" },
   { id: 80, macro: "UNUSED_PIKACHU_DOLL", name: "未使用皮卡丘玩偶" },
@@ -274,7 +274,7 @@ export function getObjectEventGraphics(value) {
 export function formatObjectEventGraphicsLabel(value) {
   const item = getObjectEventGraphics(value)
   const hex = formatObjectEventGraphicsHex(value)
-  return item ? `${item.name}` : `${hex} 未知图形`
+  return item ? `${hex} ${item.name}` : `${hex} 未知图形`
 }
 
 export const OBJECT_EVENT_GRAPHICS_OPTIONS = OBJECT_EVENT_GRAPHICS.map(item => ({

@@ -21,7 +21,7 @@
           </button>
         </div>
 
-        <div class="add-event-actions">
+        <div class="add-event-actions" :class="{ single: addEventActions.length === 1 }">
           <el-button
             v-for="action in addEventActions"
             :key="action.type"
@@ -62,10 +62,10 @@
           <el-button plain @click="clearSelection">返回</el-button>
         </div>
 
-        <section class="event-section">
+        <div class="event-section">
           <div class="section-title">参数</div>
           <div class="event-form">
-            <label v-if="selectedEvent.type === 'object'" class="form-field">
+            <div v-if="selectedEvent.type === 'object'" class="form-field">
               <span>对象ID</span>
               <el-input-number
                 v-model="formValues.localId"
@@ -74,10 +74,10 @@
                 
                 controls-position="right"
               />
-            </label>
+            </div>
 
             <div class="coordinate-grid">
-              <label class="form-field compact">
+              <div class="form-field compact">
                 <span>x</span>
                 <el-input-number
                   v-model="formValues.x"
@@ -86,8 +86,8 @@
                   size="small"
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field compact">
+              </div>
+              <div class="form-field compact">
                 <span>y</span>
                 <el-input-number
                   v-model="formValues.y"
@@ -96,8 +96,8 @@
                   size="small"
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field compact">
+              </div>
+              <div class="form-field compact">
                 <span>z</span>
                 <el-input-number
                   v-model="formValues.elevation"
@@ -106,11 +106,11 @@
                   size="small"
                   controls-position="right"
                 />
-              </label>
+              </div>
             </div>
 
             <template v-if="selectedEvent.type === 'object'">
-              <label class="form-field">
+              <div class="form-field">
                 <span>图形</span>
                 <el-select v-model="formValues.graphicsId" filterable>
                   <el-option
@@ -120,9 +120,9 @@
                     :label="option.label"
                   />
                 </el-select>
-              </label>
+              </div>
 
-              <label class="form-field">
+              <div class="form-field">
                 <span>移动类型</span>
                 <el-select v-model="formValues.movementType" filterable>
                   <el-option
@@ -132,10 +132,10 @@
                     :label="option.label"
                   />
                 </el-select>
-              </label>
+              </div>
 
               <div class="movement-range-grid">
-                <label class="form-field">
+                <div class="form-field">
                   <span>移动范围 X</span>
                   <el-input-number
                     v-model="formValues.movementRangeX"
@@ -144,8 +144,8 @@
                     
                     controls-position="right"
                   />
-                </label>
-                <label class="form-field">
+                </div>
+                <div class="form-field">
                   <span>移动范围 Y</span>
                   <el-input-number
                     v-model="formValues.movementRangeY"
@@ -154,10 +154,10 @@
                     
                     controls-position="right"
                   />
-                </label>
+                </div>
               </div>
 
-              <label class="form-field">
+              <div class="form-field">
                 <span>事件Flag</span>
                 <el-input-number
                   v-model="formValues.eventFlag"
@@ -166,9 +166,9 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
 
-              <label class="form-field">
+              <div class="form-field">
                 <span>训练家类型</span>
                 <el-select v-model="formValues.trainerType" filterable>
                   <el-option
@@ -178,9 +178,9 @@
                     :label="option.label"
                   />
                 </el-select>
-              </label>
+              </div>
 
-              <label class="form-field">
+              <div class="form-field">
                 <span>视野/树果</span>
                 <el-input-number
                   v-model="formValues.trainerRangeOrBerryTreeId"
@@ -189,9 +189,9 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
 
-              <label v-if="selectedEvent.trainerBattle" class="form-field">
+              <div v-if="selectedEvent.trainerBattle" class="form-field">
                 <span>训练家ID</span>
                 <el-input-number
                   v-model="formValues.trainerId"
@@ -200,11 +200,11 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
             </template>
 
             <template v-else-if="selectedEvent.type === 'warp'">
-              <label class="form-field">
+              <div class="form-field">
                 <span>目标地图组</span>
                 <el-input-number
                   v-model="formValues.mapGroup"
@@ -213,8 +213,8 @@
                   
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field">
+              </div>
+              <div class="form-field">
                 <span>目标地图</span>
                 <el-input-number
                   v-model="formValues.mapNum"
@@ -223,8 +223,8 @@
                   
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field">
+              </div>
+              <div class="form-field">
                 <span>目标 Warp</span>
                 <el-input-number
                   v-model="formValues.warpId"
@@ -233,11 +233,11 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
             </template>
 
             <template v-else-if="selectedEvent.type === 'coord'">
-              <label class="form-field">
+              <div class="form-field">
                 <span>触发值</span>
                 <el-input-number
                   v-model="formValues.trigger"
@@ -246,8 +246,8 @@
                   
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field">
+              </div>
+              <div class="form-field">
                 <span>索引变量</span>
                 <el-input-number
                   v-model="formValues.indexVariable"
@@ -256,11 +256,11 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
             </template>
 
             <template v-else-if="selectedEvent.type === 'bg'">
-              <label class="form-field">
+              <div class="form-field">
                 <span>事件类型</span>
                 <el-input-number
                   v-model="formValues.kind"
@@ -269,8 +269,8 @@
                   
                   controls-position="right"
                 />
-              </label>
-              <label class="form-field">
+              </div>
+              <div class="form-field">
                 <span>参数</span>
                 <el-input-number
                   v-model="formValues.argument"
@@ -279,7 +279,7 @@
                   
                   controls-position="right"
                 />
-              </label>
+              </div>
             </template>
           </div>
 
@@ -289,20 +289,14 @@
             <div>目标 Warp：{{ warpTargetWarpText }}</div>
             <el-button :disabled="!warpInfo.targetMap" @click="jumpToWarpTarget">跳转目标地图</el-button>
           </div>
-        </section>
+        </div>
 
-        <section v-if="selectedEventHasScript" class="event-section">
-          <div class="section-title">脚本查看</div>
-          <label class="form-field">
+        <div v-if="selectedEventHasScript" class="event-section">
+          <div class="section-title">脚本</div>
+          <div class="form-field">
             <span>脚本指针</span>
-            <el-input-number
-              v-model="formValues.scriptPointer"
-              :min="0"
-              :max="4294967295"
-              disabled
-              controls-position="right"
-            />
-          </label>
+            <el-input :model-value="scriptPointerHex" disabled />
+          </div>
           <div class="script-view-actions">
             <el-button
               v-for="action in scriptViewerActions"
@@ -315,7 +309,7 @@
               {{ action.label }}
             </el-button>
           </div>
-        </section>
+        </div>
 
         <div class="detail-actions">
           <el-button type="primary" @click="saveSelectedEvent">应用修改</el-button>
@@ -323,105 +317,307 @@
           <el-button type="danger" plain @click="deleteSelectedEvent">删除{{ deleteTargetLabel }}</el-button>
         </div>
 
-        <details class="debug-json">
+        <!-- <details class="debug-json">
           <summary>调试 JSON</summary>
           <pre>{{ selectedEventJson }}</pre>
-        </details>
+        </details> -->
       </div>
     </div>
 
-    <el-dialog v-model="addDialogVisible" :title="addDialogTitle" width="420px" append-to-body>
-      <div class="add-form">
-        <div class="coordinate-grid">
-          <label class="form-field compact">
-            <span>x</span>
-            <el-input-number v-model="addForm.x" :min="-32768" :max="32767" controls-position="right" />
-          </label>
-          <label class="form-field compact">
-            <span>y</span>
-            <el-input-number v-model="addForm.y" :min="-32768" :max="32767" controls-position="right" />
-          </label>
-          <label class="form-field compact">
-            <span>z</span>
-            <el-input-number v-model="addForm.elevation" :min="0" :max="255" controls-position="right" />
-          </label>
+    <el-dialog
+      v-model="addDialogVisible"
+      :title="addDialogTitle"
+      width="460px"
+      class="event-add-dialog"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <div class="add-form event-add-form">
+        <div class="add-form-section">
+          <div class="add-form-section-title">位置</div>
+          <div class="coordinate-grid">
+            <div class="form-field compact">
+              <span>x</span>
+              <el-input-number v-model="addForm.x" :min="-32768" :max="32767" controls-position="right" />
+            </div>
+            <div class="form-field compact">
+              <span>y</span>
+              <el-input-number v-model="addForm.y" :min="-32768" :max="32767" controls-position="right" />
+            </div>
+            <div class="form-field compact">
+              <span>z</span>
+              <el-input-number v-model="addForm.elevation" :min="0" :max="255" controls-position="right" />
+            </div>
+          </div>
         </div>
 
-        <div v-if="addType === 'object'" class="field-grid">
-          <label class="form-field">
-            <span>对象ID</span>
-            <el-input-number v-model="addForm.localId" :min="0" :max="255" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>图形</span>
-            <el-select v-model="addForm.graphicsId" filterable>
-              <el-option
-                v-for="option in objectGraphicsOptions"
-                :key="option.value"
-                :value="option.value"
-                :label="option.label"
+        <div v-if="addType === 'object'" class="add-form-section">
+          <div class="add-form-section-title">对象</div>
+          <div class="field-grid">
+            <div class="form-field">
+              <span>对象模板</span>
+              <el-select v-model="addForm.templateId" @change="applyAddObjectTemplateDefaults">
+                <el-option
+                  v-for="option in objectTemplateOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div class="form-field">
+              <span>对象ID</span>
+              <el-input-number v-model="addForm.localId" :min="0" :max="255" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>事件Flag</span>
+              <el-input-number
+                v-model="addForm.eventFlag"
+                :min="addObjectTemplateAllowsZeroEventFlag ? 0 : 1"
+                :max="65535"
+                controls-position="right"
               />
-            </el-select>
-          </label>
-          <label class="form-field">
-            <span>脚本指针</span>
-            <el-input-number v-model="addForm.scriptPointer" :min="0" :max="4294967295" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>事件Flag</span>
-            <el-input-number v-model="addForm.eventFlag" :min="0" :max="65535" controls-position="right" />
-          </label>
+            </div>
+            <div v-if="addObjectTemplateIsItemPickup" class="form-field">
+              <span>道具ID</span>
+              <el-input-number v-model="addForm.itemId" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <template v-else-if="addObjectTemplateIsPokemonGift">
+              <div class="form-field">
+                <span>领取Flag</span>
+                <el-input-number v-model="addForm.scriptFlag" :min="1" :max="65535" controls-position="right" />
+              </div>
+              <div v-if="addForm.templateId === 'pokemonGiftNpc'" class="form-field">
+                <span>宝可梦ID</span>
+                <el-input-number v-model="addForm.speciesId" :min="1" :max="65535" controls-position="right" />
+              </div>
+              <div v-else class="form-field textarea-field">
+                <span>随机池</span>
+                <el-input v-model="addForm.randomSpeciesPool" type="textarea" :rows="2" placeholder="例如：1, 4, 7" />
+              </div>
+              <div class="form-field">
+                <span>等级</span>
+                <el-input-number v-model="addForm.pokemonLevel" :min="1" :max="100" controls-position="right" />
+              </div>
+              <div class="form-field">
+                <span>携带道具</span>
+                <el-input-number v-model="addForm.heldItemId" :min="0" :max="65535" controls-position="right" />
+              </div>
+              <div class="form-field textarea-field">
+                <span>领取对话</span>
+                <el-input v-model="addForm.giftText" type="textarea" :rows="2" />
+              </div>
+              <div class="form-field textarea-field">
+                <span>已领取对话</span>
+                <el-input v-model="addForm.receivedText" type="textarea" :rows="2" />
+              </div>
+            </template>
+            <template v-else-if="addObjectTemplateIsMoveTutor">
+              <div v-if="addObjectTemplateIsSingleMoveTutor" class="form-field">
+                <span>技能ID</span>
+                <el-input-number v-model="addForm.moveId" :min="1" :max="65535" controls-position="right" />
+              </div>
+              <template v-else>
+                <div class="form-field textarea-field">
+                  <span>技能列表</span>
+                  <el-input v-model="addForm.moveIds" type="textarea" :rows="2" placeholder="例如：398, 409, 7" />
+                </div>
+              </template>
+              <div class="form-field textarea-field">
+                <span>介绍对话</span>
+                <el-input v-model="addForm.tutorText" type="textarea" :rows="2" />
+              </div>
+              <div v-if="addObjectTemplateIsMultiMoveTutor" class="form-field textarea-field">
+                <span>选择提示</span>
+                <el-input v-model="addForm.tutorPromptText" type="textarea" :rows="2" />
+              </div>
+            </template>
+            <div class="add-object-status" :class="{ error: addObjectFlagStatusIsError }">
+              <div>{{ addObjectTemplateDescription }}</div>
+              <div>{{ addObjectLocalIdStatus }}</div>
+              <div>{{ addObjectFlagStatus }}</div>
+            </div>
+          </div>
         </div>
 
-        <div v-else-if="addType === 'warp'" class="field-grid">
-          <label class="form-field">
-            <span>目标地图组</span>
-            <el-input-number v-model="addForm.mapGroup" :min="0" :max="255" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>目标地图</span>
-            <el-input-number v-model="addForm.mapNum" :min="0" :max="255" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>目标 Warp</span>
-            <el-input-number v-model="addForm.warpId" :min="0" :max="255" controls-position="right" />
-          </label>
+        <div v-else-if="addType === 'trainer'" class="add-form-section">
+          <div class="add-form-section-title">训练家</div>
+          <div class="field-grid">
+            <div class="form-field">
+              <span>脚本模板</span>
+              <el-select v-model="addForm.trainerTemplateId" @change="applyAddTrainerTemplateDefaults">
+                <el-option
+                  v-for="option in trainerTemplateOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div class="form-field">
+              <span>对象ID</span>
+              <el-input-number v-model="addForm.localId" :min="0" :max="255" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>图形</span>
+              <el-select v-model="addForm.graphicsId" filterable>
+                <el-option
+                  v-for="option in objectGraphicsOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div class="form-field">
+              <span>移动类型</span>
+              <el-select v-model="addForm.movementType" filterable>
+                <el-option
+                  v-for="option in movementTypeSelectOptionsForAdd"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div class="form-field">
+              <span>训练家类型</span>
+              <el-select v-model="addForm.trainerType" filterable>
+                <el-option
+                  v-for="option in trainerTypeSelectOptionsForAdd"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div class="form-field">
+              <span>视野/树果</span>
+              <el-input-number v-model="addForm.trainerRangeOrBerryTreeId" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>训练家ID</span>
+              <el-input-number v-model="addForm.trainerId" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>事件Flag</span>
+              <el-input-number v-model="addForm.eventFlag" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <template v-if="addTrainerTemplateIsItemReward">
+              <div class="form-field">
+                <span>道具ID</span>
+                <el-input-number v-model="addForm.itemId" :min="0" :max="65535" controls-position="right" />
+              </div>
+              <div class="form-field">
+                <span>数量</span>
+                <el-input-number v-model="addForm.quantity" :min="1" :max="99" controls-position="right" />
+              </div>
+            </template>
+            <template v-else-if="addTrainerTemplateIsPokemonReward">
+              <div class="form-field">
+                <span>宝可梦ID</span>
+                <el-input-number v-model="addForm.speciesId" :min="1" :max="65535" controls-position="right" />
+              </div>
+              <div class="form-field">
+                <span>等级</span>
+                <el-input-number v-model="addForm.pokemonLevel" :min="1" :max="100" controls-position="right" />
+              </div>
+              <div class="form-field">
+                <span>携带道具</span>
+                <el-input-number v-model="addForm.heldItemId" :min="0" :max="65535" controls-position="right" />
+              </div>
+            </template>
+            <template v-if="addTrainerTemplateIsReward">
+              <div class="form-field">
+                <span>奖励Flag</span>
+                <el-input-number v-model="addForm.scriptFlag" :min="1" :max="65535" controls-position="right" />
+              </div>
+            </template>
+            <div v-if="addTrainerTemplateHasIntro" class="form-field textarea-field">
+              <span>开战对话</span>
+              <el-input v-model="addForm.introText" type="textarea" :rows="2" />
+            </div>
+            <div class="form-field textarea-field">
+              <span>战败对话</span>
+              <el-input v-model="addForm.defeatText" type="textarea" :rows="2" />
+            </div>
+            <template v-if="addTrainerTemplateIsReward">
+              <div class="form-field textarea-field">
+                <span>已领取对话</span>
+                <el-input v-model="addForm.receivedText" type="textarea" :rows="2" />
+              </div>
+            </template>
+            <div v-else class="form-field textarea-field">
+              <span>战后对话</span>
+              <el-input v-model="addForm.postBattleText" type="textarea" :rows="2" />
+            </div>
+            <div class="add-object-status" :class="{ error: addTrainerStatusIsError }">
+              <div>{{ addTrainerTemplateDescription }}</div>
+              <div>{{ addTrainerStatus }}</div>
+            </div>
+          </div>
         </div>
 
-        <div v-else-if="addType === 'coord'" class="field-grid">
-          <label class="form-field">
-            <span>触发值</span>
-            <el-input-number v-model="addForm.trigger" :min="0" :max="65535" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>索引变量</span>
-            <el-input-number v-model="addForm.indexVariable" :min="0" :max="65535" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>脚本指针</span>
-            <el-input-number v-model="addForm.scriptPointer" :min="0" :max="4294967295" controls-position="right" />
-          </label>
+        <div v-else-if="addType === 'warp'" class="add-form-section">
+          <div class="add-form-section-title">目标</div>
+          <div class="field-grid">
+            <div class="form-field">
+              <span>目标地图组</span>
+              <el-input-number v-model="addForm.mapGroup" :min="0" :max="255" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>目标地图</span>
+              <el-input-number v-model="addForm.mapNum" :min="0" :max="255" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>目标 Warp</span>
+              <el-input-number v-model="addForm.warpId" :min="0" :max="255" controls-position="right" />
+            </div>
+          </div>
         </div>
 
-        <div v-else-if="addType === 'bg'" class="field-grid">
-          <label class="form-field">
-            <span>事件类型</span>
-            <el-input-number v-model="addForm.kind" :min="0" :max="255" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>参数</span>
-            <el-input-number v-model="addForm.argument" :min="0" :max="65535" controls-position="right" />
-          </label>
-          <label class="form-field">
-            <span>脚本指针</span>
-            <el-input-number v-model="addForm.scriptPointer" :min="0" :max="4294967295" controls-position="right" />
-          </label>
+        <div v-else-if="addType === 'coord'" class="add-form-section">
+          <div class="add-form-section-title">触发</div>
+          <div class="field-grid">
+            <div class="form-field">
+              <span>触发值</span>
+              <el-input-number v-model="addForm.trigger" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>索引变量</span>
+              <el-input-number v-model="addForm.indexVariable" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>脚本指针</span>
+              <el-input-number v-model="addForm.scriptPointer" :min="0" :max="4294967295" controls-position="right" />
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="addType === 'bg'" class="add-form-section">
+          <div class="add-form-section-title">事件</div>
+          <div class="field-grid">
+            <div class="form-field">
+              <span>事件类型</span>
+              <el-input-number v-model="addForm.kind" :min="0" :max="255" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>参数</span>
+              <el-input-number v-model="addForm.argument" :min="0" :max="65535" controls-position="right" />
+            </div>
+            <div class="form-field">
+              <span>脚本指针</span>
+              <el-input-number v-model="addForm.scriptPointer" :min="0" :max="4294967295" controls-position="right" />
+            </div>
+          </div>
         </div>
       </div>
 
       <template #footer>
         <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitAddEvent">保存</el-button>
+        <el-button type="primary" :disabled="addDialogSubmitDisabled" @click="submitAddEvent">
+          保存
+        </el-button>
       </template>
     </el-dialog>
 
@@ -501,7 +697,12 @@
 <script>
 import { ElMessage, ElMessageBox } from "element-plus"
 import {
+  DEFAULT_MOVE_TUTOR_SCRIPT_POINTER,
+  OBJECT_EVENT_SCRIPT_TEMPLATE_OPTIONS,
+  OBJECT_EVENT_TRAINER_TEMPLATE_OPTIONS,
   OBJECT_EVENT_GRAPHICS_OPTIONS,
+  getObjectEventScriptTemplate,
+  getObjectEventTrainerTemplate,
   getMapEventKey,
   getMapEventTypeLabel,
 } from "@/core"
@@ -516,8 +717,9 @@ const EVENT_TABS = [
 
 const ADD_TYPE_LABELS = {
   object: "对象",
+  trainer: "训练家",
   warp: "传送点",
-  coord: "坐标事件",
+  coord: "触发事件",
   bg: "背景事件",
 }
 
@@ -551,6 +753,8 @@ const TRAINER_TYPE_LABELS = {
   0x02: "可观察所有方向",
   0x03: "埋地训练家",
 }
+
+const DEFAULT_MOVE_TUTOR_SCRIPT_POINTER_TEXT = formatHex(DEFAULT_MOVE_TUTOR_SCRIPT_POINTER)
 
 export default {
   name: "MapEventPanel",
@@ -613,6 +817,7 @@ export default {
       return EVENT_TABS.find(tab => tab.value === this.activeFilter)?.label || "事件"
     },
     addEventActions() {
+      if (this.activeFilter === "trainer") return [{ type: "trainer", label: "新增训练家" }]
       if (this.activeFilter === "warp") return [{ type: "warp", label: "新增传送点" }]
       if (this.activeFilter === "event") {
         return [
@@ -658,11 +863,266 @@ export default {
     trainerTypeSelectOptions() {
       return this.buildValueOptions(TRAINER_TYPE_LABELS, this.formValues.trainerType, "未知训练家类型")
     },
+    movementTypeSelectOptionsForAdd() {
+      return this.buildValueOptions(MOVEMENT_TYPE_LABELS, this.addForm.movementType, "未知移动类型")
+    },
+    trainerTypeSelectOptionsForAdd() {
+      return this.buildValueOptions(TRAINER_TYPE_LABELS, this.addForm.trainerType, "未知训练家类型")
+    },
     objectGraphicsOptions() {
       return OBJECT_EVENT_GRAPHICS_OPTIONS
     },
+    objectTemplateOptions() {
+      return OBJECT_EVENT_SCRIPT_TEMPLATE_OPTIONS
+    },
+    trainerTemplateOptions() {
+      return OBJECT_EVENT_TRAINER_TEMPLATE_OPTIONS
+    },
+    addObjectTemplateDescription() {
+      return getObjectEventScriptTemplate(this.addForm.templateId).description
+    },
+    addObjectTemplateIsPokemonGift() {
+      return this.addForm.templateId === "pokemonGiftNpc" || this.addForm.templateId === "randomPokemonGiftNpc"
+    },
+    addObjectTemplateIsMoveTutor() {
+      return this.addObjectTemplateIsSingleMoveTutor || this.addObjectTemplateIsMultiMoveTutor
+    },
+    addObjectTemplateAllowsZeroEventFlag() {
+      return this.addObjectTemplateIsPokemonGift || this.addObjectTemplateIsMoveTutor
+    },
+    addObjectTemplateIsSingleMoveTutor() {
+      return this.addForm.templateId === "singleMoveTutorNpc"
+    },
+    addObjectTemplateIsMultiMoveTutor() {
+      return this.addForm.templateId === "multiMoveTutorNpc"
+    },
+    addObjectTemplateIsItemPickup() {
+      return !this.addObjectTemplateIsPokemonGift && !this.addObjectTemplateIsMoveTutor
+    },
+    addMoveTutorMoveIds() {
+      const values = String(this.addForm.moveIds || "")
+        .split(/[\s,，;；]+/)
+        .filter(Boolean)
+      return values
+        .map(value => Number(value))
+        .filter(value => Number.isInteger(value) && value > 0 && value <= 0xffff)
+    },
+    addTrainerTemplateDescription() {
+      return getObjectEventTrainerTemplate(this.addForm.trainerTemplateId).description
+    },
+    addTrainerTemplateIsItemReward() {
+      return this.addForm.trainerTemplateId === "itemRewardSingle"
+    },
+    addTrainerTemplateIsPokemonReward() {
+      return this.addForm.trainerTemplateId === "pokemonRewardSingle"
+    },
+    addTrainerTemplateIsReward() {
+      return this.addTrainerTemplateIsItemReward || this.addTrainerTemplateIsPokemonReward
+    },
+    addTrainerTemplateHasIntro() {
+      return this.addTrainerTemplateIsReward
+    },
+    addTrainerLocalIdRefs() {
+      if (this.addType !== "trainer") return []
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId)) return []
+      return (this.eventCollection?.objects || []).filter(event => Number(event.localId) === localId)
+    },
+    addTrainerStatus() {
+      if (this.addType !== "trainer") return ""
+
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId) || localId < 0 || localId > 0xff) {
+        return "对象ID 必须是 0 ~ 255 的整数。"
+      }
+      if (this.addTrainerLocalIdRefs.length) {
+        const first = this.addTrainerLocalIdRefs[0]
+        return `对象ID ${localId} 已在当前地图使用：OBJ #${first.index}。`
+      }
+
+      if (this.addTrainerTemplateIsReward) {
+        const rewardFlag = Number(this.addForm.scriptFlag)
+        if (!Number.isInteger(rewardFlag) || rewardFlag <= 0 || rewardFlag > 0xffff) {
+          return "奖励Flag 必须是 1 ~ 65535 的整数。"
+        }
+      }
+
+      if (this.addTrainerTemplateIsItemReward) {
+        const itemId = Number(this.addForm.itemId)
+        const quantity = Number(this.addForm.quantity)
+        if (!Number.isInteger(itemId) || itemId < 0 || itemId > 0xffff) {
+          return "道具ID 必须是 0 ~ 65535 的整数。"
+        }
+        if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 0xffff) {
+          return "数量必须是 1 ~ 65535 的整数。"
+        }
+        const rewardFlag = Number(this.addForm.scriptFlag)
+        return `战斗胜利后用 Std_BrailleMessage 给道具 ${itemId} x${quantity}，奖励Flag ${rewardFlag} 防止重复领取。`
+      }
+
+      if (this.addTrainerTemplateIsPokemonReward) {
+        const speciesId = Number(this.addForm.speciesId)
+        const level = Number(this.addForm.pokemonLevel)
+        const heldItemId = Number(this.addForm.heldItemId)
+        if (!Number.isInteger(speciesId) || speciesId <= 0 || speciesId > 0xffff) {
+          return "宝可梦ID 必须是 1 ~ 65535 的整数。"
+        }
+        if (!Number.isInteger(level) || level <= 0 || level > 100) {
+          return "等级必须是 1 ~ 100 的整数。"
+        }
+        if (!Number.isInteger(heldItemId) || heldItemId < 0 || heldItemId > 0xffff) {
+          return "携带道具必须是 0 ~ 65535 的整数。"
+        }
+        const rewardFlag = Number(this.addForm.scriptFlag)
+        return `战斗胜利后给宝可梦 ${speciesId} Lv.${level}，奖励Flag ${rewardFlag} 防止重复领取。`
+      }
+
+      return `对象ID ${localId} 当前可用。`
+    },
+    addTrainerStatusIsError() {
+      if (this.addType !== "trainer") return false
+
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId) || localId < 0 || localId > 0xff || this.addTrainerLocalIdRefs.length > 0) {
+        return true
+      }
+      if (!this.addTrainerTemplateIsReward) return false
+
+      const rewardFlag = Number(this.addForm.scriptFlag)
+      if (!Number.isInteger(rewardFlag) || rewardFlag <= 0 || rewardFlag > 0xffff) return true
+
+      if (this.addTrainerTemplateIsItemReward) {
+        const itemId = Number(this.addForm.itemId)
+        const quantity = Number(this.addForm.quantity)
+        return !Number.isInteger(itemId) || itemId < 0 || itemId > 0xffff
+          || !Number.isInteger(quantity) || quantity <= 0 || quantity > 0xffff
+      }
+
+      if (this.addTrainerTemplateIsPokemonReward) {
+        const speciesId = Number(this.addForm.speciesId)
+        const level = Number(this.addForm.pokemonLevel)
+        const heldItemId = Number(this.addForm.heldItemId)
+        return !Number.isInteger(speciesId) || speciesId <= 0 || speciesId > 0xffff
+          || !Number.isInteger(level) || level <= 0 || level > 100
+          || !Number.isInteger(heldItemId) || heldItemId < 0 || heldItemId > 0xffff
+      }
+
+      return false
+    },
+    addDialogSubmitDisabled() {
+      if (this.addType === "object") return this.addObjectFlagStatusIsError
+      if (this.addType === "trainer") return this.addTrainerStatusIsError
+      return false
+    },
+    addObjectLocalIdRefs() {
+      if (this.addType !== "object") return []
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId)) return []
+      return (this.eventCollection?.objects || []).filter(event => Number(event.localId) === localId)
+    },
+    addObjectLocalIdStatus() {
+      if (this.addType !== "object") return ""
+
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId) || localId < 0 || localId > 0xff) {
+        return "对象ID 必须是 0 ~ 255 的整数。"
+      }
+
+      if (this.addObjectLocalIdRefs.length) {
+        const first = this.addObjectLocalIdRefs[0]
+        return `对象ID ${localId} 已在当前地图使用：OBJ #${first.index}。`
+      }
+
+      return `对象ID ${localId} 当前可用。`
+    },
+    addObjectFlagRefs() {
+      const flag = Number(this.addForm.eventFlag)
+      if (!this.repository || this.addType !== "object" || !Number.isInteger(flag) || flag <= 0) return []
+      return this.repository.findGlobalObjectFlagRefs(flag)
+    },
+    addObjectFlagStatus() {
+      if (this.addType !== "object") return ""
+
+      if (this.addObjectTemplateIsPokemonGift) {
+        const scriptFlag = Number(this.addForm.scriptFlag)
+        if (!Number.isInteger(scriptFlag) || scriptFlag <= 0 || scriptFlag > 0xffff) {
+          return "领取Flag 必须是 1 ~ 65535 的整数。"
+        }
+
+        return `脚本会先 checkflag ${scriptFlag}，领取后 setflag ${scriptFlag}；对象事件Flag 可保持 0。`
+      }
+
+      const flag = Number(this.addForm.eventFlag)
+      const minFlag = this.addObjectTemplateAllowsZeroEventFlag ? 0 : 1
+      if (!Number.isInteger(flag) || flag < minFlag || flag > 0xffff) {
+        return `事件Flag 必须是 ${minFlag} ~ 65535 的整数。`
+      }
+
+      if (flag > 0 && this.addObjectFlagRefs.length) {
+        const first = this.addObjectFlagRefs[0]
+        const mapName = this.mapDisplayName(first.header)
+        return `事件Flag ${flag} 已被使用：${mapName} / OBJ #${first.event.index}。`
+      }
+
+      if (this.addObjectTemplateIsMoveTutor) {
+        const tutorPointer = this.parseHexOrDecimal(this.addForm.tutorScriptPointer)
+        if (this.addObjectTemplateIsSingleMoveTutor) {
+          const moveId = Number(this.addForm.moveId)
+          if (!Number.isInteger(moveId) || moveId <= 0 || moveId > 0xffff) {
+            return "技能ID 必须是 1 ~ 65535 的整数。"
+          }
+        }
+        if (this.addObjectTemplateIsMultiMoveTutor && !this.addMoveTutorMoveIds.length) {
+          return "技能ID 必须是 1 ~ 65535 的整数。"
+        }
+        if (!Number.isInteger(tutorPointer) || tutorPointer < 0x08000000 || tutorPointer > 0x09ffffff) {
+          return "教学脚本指针必须是有效 GBA 指针。"
+        }
+        if (this.addObjectTemplateIsMultiMoveTutor) {
+          if (this.addMoveTutorMoveIds.length > 10) {
+            return "多技能教学师一次最多放 10 个技能。"
+          }
+          return `会自动扩展菜单表，并分配 0x7F 起的教学菜单；${this.addMoveTutorMoveIds.length} 个技能后追加 Exit，再 call ${formatHex(tutorPointer)}。`
+        }
+
+        return `对话后设置 moveId=${Number(this.addForm.moveId)}，再 call ${formatHex(tutorPointer)}。`
+      }
+
+      return `事件Flag ${flag} 当前未被全局对象使用。`
+    },
+    addObjectFlagStatusIsError() {
+      if (this.addType !== "object") return false
+      const localId = Number(this.addForm.localId)
+      if (!Number.isInteger(localId) || localId < 0 || localId > 0xff || this.addObjectLocalIdRefs.length > 0) {
+        return true
+      }
+      if (this.addObjectTemplateIsPokemonGift) {
+        const scriptFlag = Number(this.addForm.scriptFlag)
+        return !Number.isInteger(scriptFlag) || scriptFlag <= 0 || scriptFlag > 0xffff
+      }
+      const flag = Number(this.addForm.eventFlag)
+      const minFlag = this.addObjectTemplateAllowsZeroEventFlag ? 0 : 1
+      if (!Number.isInteger(flag) || flag < minFlag || flag > 0xffff || this.addObjectFlagRefs.length > 0) return true
+      if (this.addObjectTemplateIsMoveTutor) {
+        const tutorPointer = this.parseHexOrDecimal(this.addForm.tutorScriptPointer)
+        if (!Number.isInteger(tutorPointer) || tutorPointer < 0x08000000 || tutorPointer > 0x09ffffff) return true
+        if (this.addObjectTemplateIsSingleMoveTutor) {
+          const moveId = Number(this.addForm.moveId)
+          return !Number.isInteger(moveId) || moveId <= 0 || moveId > 0xffff
+        }
+        if (this.addObjectTemplateIsMultiMoveTutor) {
+          return !this.addMoveTutorMoveIds.length
+            || this.addMoveTutorMoveIds.length > 10
+        }
+      }
+      return false
+    },
     selectedEventHasScript() {
       return ["object", "coord", "bg"].includes(this.selectedEvent?.type)
+    },
+    scriptPointerHex() {
+      const pointer = Number(this.formValues.scriptPointer ?? this.selectedEvent?.scriptPointer)
+      return Number.isInteger(pointer) ? formatHex(pointer >>> 0) : "null"
     },
     scriptViewerActions() {
       if (!this.selectedEventHasScript) return []
@@ -816,11 +1276,11 @@ export default {
       return "EVENT"
     },
     eventBadgeText(event) {
-      if (event.type === "object" && event.trainerBattle) return "TRAINER"
-      if (event.type === "object") return "NPC"
-      if (event.type === "warp") return "WARP"
-      if (event.type === "bg") return "BG"
-      if (event.type === "coord") return "TRIGGER"
+      if (event.type === "object" && event.trainerBattle) return "训练家"
+      if (event.type === "object") return "对象"
+      if (event.type === "warp") return "传送点"
+      if (event.type === "bg") return "背景事件"
+      if (event.type === "coord") return "触发事件"
       return "?"
     },
     eventBadgeClass(event) {
@@ -848,6 +1308,12 @@ export default {
       if (event.type === "object") return event.trainerBattle ? "trainer" : "object"
       if (event.type === "coord" || event.type === "bg") return "event"
       return event.type
+    },
+    mapDisplayName(header) {
+      if (!header) return "未知地图"
+      const key = `${header.mapGroup}:${header.mapNum}`
+      const mapItem = this.maps.find(item => item.key === key || (item.mapGroup === header.mapGroup && item.mapNum === header.mapNum))
+      return mapItem?.name || `${header.mapGroup}:${header.mapNum}`
     },
     clearSelection() {
       this.updateEventState({ selectedKey: "" })
@@ -954,10 +1420,14 @@ export default {
     openAddDialog(type) {
       this.addType = Object.prototype.hasOwnProperty.call(ADD_TYPE_LABELS, type) ? type : "object"
       this.addForm = this.createAddForm()
+      if (this.addType === "object") this.initializeAddObjectForm()
+      if (this.addType === "trainer") this.initializeAddTrainerForm()
       this.addDialogVisible = true
     },
     createAddForm() {
       return {
+        templateId: "itemPickup",
+        trainerTemplateId: "simpleSingle",
         x: 0,
         y: 0,
         elevation: 0,
@@ -965,6 +1435,10 @@ export default {
         graphicsId: 0,
         scriptPointer: 0,
         eventFlag: 0,
+        trainerId: 0,
+        introText: "Let's battle!",
+        defeatText: "I lost!",
+        postBattleText: "Let's battle again sometime!",
         mapGroup: 0,
         mapNum: 0,
         warpId: 0,
@@ -972,13 +1446,125 @@ export default {
         indexVariable: 0,
         kind: 0,
         argument: 0,
+        itemId: 1,
+        quantity: 1,
+        moveId: 398,
+        moveIds: "398, 409, 8, 9, 7, 264",
+        menuId: 0x78,
+        exitChoice: 6,
+        tutorScriptPointer: DEFAULT_MOVE_TUTOR_SCRIPT_POINTER_TEXT,
+        speciesId: 1,
+        randomSpeciesPool: "1, 4, 7",
+        scriptFlag: 1165,
+        pokemonLevel: 5,
+        heldItemId: 0,
+        giftText: "Please take good care of this Pokemon!",
+        tutorText: "Which Pokemon should learn this move?",
+        tutorPromptText: "Which Pokemon should learn this move?",
+        receivedText: "You already received this Pokemon.",
+      }
+    },
+    initializeAddObjectForm() {
+      const objects = this.eventCollection?.objects || []
+      this.addForm.localId = this.repository?.getNextLocalId(objects) ?? 1
+      this.addForm.x = 0
+      this.addForm.y = 0
+      this.addForm.elevation = 0
+      this.addForm.eventFlag = 1165
+      this.addForm.itemId = 1
+      this.addForm.moveId = 398
+      this.addForm.moveIds = "398, 409, 8, 9, 7, 264"
+      this.addForm.menuId = 0x78
+      this.addForm.exitChoice = 6
+      this.addForm.tutorScriptPointer = DEFAULT_MOVE_TUTOR_SCRIPT_POINTER_TEXT
+      this.addForm.speciesId = 1
+      this.addForm.randomSpeciesPool = "1, 4, 7"
+      this.addForm.scriptFlag = 1165
+      this.addForm.pokemonLevel = 5
+      this.addForm.heldItemId = 0
+      this.addForm.giftText = "Please take good care of this Pokemon!"
+      this.addForm.tutorText = "Which Pokemon should learn this move?"
+      this.addForm.tutorPromptText = "Which Pokemon should learn this move?"
+      this.addForm.receivedText = "You already received this Pokemon."
+      this.applyAddObjectTemplateDefaults()
+    },
+    initializeAddTrainerForm() {
+      const objects = this.eventCollection?.objects || []
+      const trainers = objects.filter(event => event.trainerBattle)
+      const previousTrainer = trainers[trainers.length - 1] || {}
+
+      this.addForm.trainerTemplateId = "simpleSingle"
+      this.addForm.localId = this.repository?.getNextLocalId(objects) ?? 1
+      this.addForm.x = previousTrainer.x ?? 0
+      this.addForm.y = previousTrainer.y ?? 0
+      this.addForm.elevation = previousTrainer.elevation ?? 0
+      this.addForm.graphicsId = previousTrainer.graphicsId ?? 1
+      this.addForm.movementType = previousTrainer.movementType ?? 0
+      this.addForm.trainerType = previousTrainer.trainerType ?? 1
+      this.addForm.trainerRangeOrBerryTreeId = previousTrainer.trainerRangeOrBerryTreeId ?? 3
+      this.addForm.trainerId = previousTrainer.trainerBattle?.trainerId ?? 0
+      this.addForm.eventFlag = previousTrainer.eventFlag ?? 0
+      this.addForm.itemId = 1
+      this.addForm.quantity = 1
+      this.addForm.scriptFlag = 1165
+      this.addForm.introText = "Let's battle!"
+      this.addForm.defeatText = "I lost!"
+      this.addForm.postBattleText = "Let's battle again sometime!"
+      this.addForm.receivedText = "I hope that item helps you."
+      this.applyAddTrainerTemplateDefaults()
+    },
+    applyAddTrainerTemplateDefaults() {
+      if (!this.addTrainerTemplateIsReward) {
+        this.addForm.postBattleText = this.addForm.postBattleText || "Let's battle again sometime!"
+        return
+      }
+
+      this.addForm.scriptFlag = this.addForm.scriptFlag || 1165
+      this.addForm.receivedText = this.addForm.receivedText || "I hope that item helps you."
+      if (this.addTrainerTemplateIsItemReward) {
+        this.addForm.itemId = this.addForm.itemId || 1
+        this.addForm.quantity = this.addForm.quantity || 1
+      }
+      if (this.addTrainerTemplateIsPokemonReward) {
+        this.addForm.speciesId = this.addForm.speciesId || 1
+        this.addForm.pokemonLevel = this.addForm.pokemonLevel || 5
+        this.addForm.heldItemId = this.addForm.heldItemId ?? 0
+      }
+    },
+    applyAddObjectTemplateDefaults() {
+      const defaults = getObjectEventScriptTemplate(this.addForm.templateId).objectDefaults || {}
+      this.addForm.graphicsId = defaults.graphicsId ?? this.addForm.graphicsId
+      this.addForm.movementType = defaults.movementType ?? this.addForm.movementType
+      this.addForm.movementRangeX = defaults.movementRangeX ?? this.addForm.movementRangeX ?? 0
+      this.addForm.movementRangeY = defaults.movementRangeY ?? this.addForm.movementRangeY ?? 0
+      this.addForm.trainerType = defaults.trainerType ?? this.addForm.trainerType ?? 0
+      this.addForm.trainerRangeOrBerryTreeId =
+        defaults.trainerRangeOrBerryTreeId ?? this.addForm.trainerRangeOrBerryTreeId ?? 0
+      if (this.addObjectTemplateIsPokemonGift) {
+        this.addForm.eventFlag = 0
+        this.addForm.scriptFlag = this.addForm.scriptFlag || 1165
+        this.addForm.receivedText = this.addForm.receivedText || "You already received this Pokemon."
+      } else if (this.addObjectTemplateIsMoveTutor) {
+        this.addForm.eventFlag = 0
+        this.addForm.moveId = this.addForm.moveId || 398
+        this.addForm.moveIds = this.addForm.moveIds || "398, 409, 8, 9, 7, 264"
+        this.addForm.menuId = this.addForm.menuId ?? 0x78
+        this.addForm.exitChoice = this.addForm.exitChoice ?? 6
+        this.addForm.tutorScriptPointer = this.addForm.tutorScriptPointer || DEFAULT_MOVE_TUTOR_SCRIPT_POINTER_TEXT
+        this.addForm.tutorText = this.addForm.tutorText || "Which Pokemon should learn this move?"
+        this.addForm.tutorPromptText = this.addForm.tutorPromptText || "Which Pokemon should learn this move?"
+      } else if (!this.addForm.eventFlag) {
+        this.addForm.eventFlag = 1165
       }
     },
     submitAddEvent() {
       if (!this.repository || !this.mapHeader) return
 
       try {
-        const collection = this.repository.addEvent(this.mapHeader, this.addType, this.addForm)
+        const values = this.addType === "trainer"
+          ? { ...this.addForm, templateId: this.addForm.trainerTemplateId }
+          : this.addForm
+        const collection = this.repository.addEvent(this.mapHeader, this.addType, values)
         const events = this.eventsForType(collection, this.addType)
         const created = events[events.length - 1]
         this.addDialogVisible = false
@@ -1000,6 +1586,7 @@ export default {
       }
     },
     eventsForType(collection, type) {
+      if (type === "trainer") return collection.objects.filter(event => event.trainerBattle)
       if (type === "object") return collection.objects
       if (type === "warp") return collection.warps
       if (type === "coord") return collection.coords
@@ -1138,6 +1725,12 @@ export default {
       }
       return options
     },
+    parseHexOrDecimal(value) {
+      if (typeof value === "string" && value.trim().toLowerCase().startsWith("0x")) {
+        return Number.parseInt(value.trim(), 16)
+      }
+      return Number(value)
+    },
     toPlainEvent(event) {
       if (!event) return null
       const skippedKeys = new Set(["rom", "profile", "targetMap", "targetWarp"])
@@ -1219,8 +1812,12 @@ export default {
 .add-event-actions {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.add-event-actions.single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .add-event-button {
@@ -1345,18 +1942,31 @@ export default {
 }
 
 .event-section {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid #d8e2ef;
-  border-radius: 8px;
-  background: #fff;
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin-bottom: 10px;
-  color: #334155;
-  font-size: 12px;
+  color: #153b78;
+  font-size: 16px;
   font-weight: 900;
+  line-height: 1.2;
+}
+
+.section-title::before {
+  width: 3px;
+  height: 13px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2563eb;
+  content: "";
 }
 
 .event-form,
@@ -1364,6 +1974,55 @@ export default {
 .add-form {
   display: grid;
   gap: 9px;
+}
+
+.event-add-dialog :deep(.el-dialog__body) {
+  padding: 18px 20px;
+  background: #ffffff;
+}
+
+.event-add-form {
+  gap: 16px;
+}
+
+.add-form-section {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.add-form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #153b78;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.add-form-section-title::before {
+  width: 3px;
+  height: 13px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2563eb;
+  content: "";
+}
+
+.add-object-status {
+  display: grid;
+  gap: 4px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.add-object-status.error {
+  color: #b91c1c;
 }
 
 .form-field {
@@ -1379,6 +2038,40 @@ export default {
 
 .form-field.compact {
   grid-template-columns: 16px minmax(0, 1fr);
+}
+
+.event-add-form .form-field {
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.event-add-form .form-field.compact {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+}
+
+.event-add-form .form-field.compact > span {
+  color: #64748b;
+  font-size: 11px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.event-add-form .textarea-field {
+  align-items: start;
+}
+
+.event-add-form .textarea-field > span {
+  padding-top: 7px;
+}
+
+.event-add-form .coordinate-grid {
+  gap: 10px;
+}
+
+.event-add-form :deep(.el-input-number .el-input__inner) {
+  text-align: left;
 }
 
 .coordinate-grid,
@@ -1398,23 +2091,27 @@ export default {
 
 .script-view-actions {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  margin-top: 12px;
 }
 
 .script-view-button,
 .detail-actions .el-button {
+  min-width: 0;
   width: 100%;
-}
-
-.detail-actions .el-button {
   margin-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 14px;
+  padding-top: 2px;
 }
 
 .warp-status {

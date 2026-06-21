@@ -1,0 +1,55 @@
+当前项目是，目标是把 `legacy` 里的原生 HTML/JS 宝可梦 ROM 地图编辑器迁移到 Vue 3 + Electron 桌面版。`legacy` 只允许参考行为，不要修改，也不要从新代码里引用，因为后续会删除。
+
+技术栈：
+- Vue 3 + Vite + Element Plus + Electron
+- 主要代码在 `desktop/src`
+- 核心 ROM 逻辑在 `desktop/src/core`
+- 工具函数在 `desktop/src/util`
+- 跨目录导入统一用 `@/core`、`@/util`
+
+重要约束：
+- 不要动 `legacy`
+- 新逻辑要迁移/重写到 `desktop/src/core` 或 Vue 组件里
+- 保留文件编码和换行；含中文文件编辑前确认 UTF-8
+- 尽量小改动，不要重写整文件
+- 优先沿用现有组件和 core repository 的结构
+- UI 不做营销页，偏桌面工具/企业后台风格
+
+当前桌面版结构：
+- `desktop/src/views/home/index.vue` 是主页面
+- 左侧：地图列表 `MapListView`
+- 中间：根据模式显示地图编辑、事件、连接器、元数据、野生宝可梦
+- 右侧：根据模式显示不同面板，不使用动态 `<component>`，因为各面板参数不同
+- 右侧面板宽度是 `360px`
+
+已有模块进展：
+- Electron 壳和打包配置已做
+- ROM 导入/导出已做
+- 地图列表、地图信息、地图元数据已迁移
+- 野生宝可梦模块已迁移，不再引用 legacy
+- 地图编辑模块已做：地图渲染、瓦片库、碰撞、拾取、Ctrl+滚轮缩放
+- 地图连接器模块已做：中间连接预览、右侧编辑、新增连接弹窗
+- 地图事件模块已做：事件列表/详情、对象/训练家/传送点/事件 tabs、地图事件标记、对象 sprite 显示、移动范围开关、脚本查看弹窗
+- 所有地图网格默认关闭；开启后网格线是纯黑 `#000000`
+
+地图事件特殊逻辑：
+- 右侧事件 tab 只过滤右侧列表，不影响中间地图显示
+- 中间地图事件区域默认显示全部事件
+- 鼠标移到地图上显示像地图编辑模块一样的坐标浮层：`x/y/z`，其中 `z` 是事件 `elevation`
+- 事件详情里的脚本查看已迁移为 Vue 弹窗，支持解析视图、原始字节、文本预览、goto/call 进入目标脚本
+- 脚本解析核心在 `desktop/src/core/script/ScriptAnalyzer.js`
+
+ROM/渲染相关：
+- 当前默认 profile 是 `runAndBun`
+- ROM 是基于 `pokeemerald-nozlocke` 二改
+- 瓦片渲染修过 secondary tileset 黑块问题
+- 不要随意改 tileset 渲染逻辑，除非能对照源码工程验证
+
+UI 风格：
+- Element Plus 弹窗已有全局皮肤，位置在 `desktop/src/style/index.scss`
+- 弹窗应像企业级工具：清晰 header/body/footer、轻量边框、稳定按钮区
+- 不要嵌套卡片，不要大面积花哨装饰
+- 操作按钮尽量清晰、紧凑、对齐
+
+验证：
+- 每次写代码不需要编译验证
